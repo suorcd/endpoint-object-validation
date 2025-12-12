@@ -22,7 +22,7 @@ spec:
       containers:
       - name: flask-eov
         # Using image from registry
-        image: gitea.ser.ink/ser/eov-flask:latest
+        image: ${IMAGE_NAME}
         imagePullPolicy: Always
         ports:
         - containerPort: 5000
