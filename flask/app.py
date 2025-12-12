@@ -279,12 +279,132 @@ def view_eov():
                 const submitBtn = document.getElementById('submit');
                 const summary = document.getElementById('summary');
                 const fullResultsDrawer = document.getElementById('full-results-drawer');
+                // Select the summary element inside the details drawer to update its title
+                const fullResultsSummary = fullResultsDrawer.querySelector('summary'); 
                 const output = document.getElementById('output');
                 const hashInput = document.getElementById('hash');
                 const hashAlgSelect = document.getElementById('hash-alg');
                 const timeoutInput = document.getElementById('timeout');
                 const formatSelect = document.getElementById('format');
                 const curlCommand = document.getElementById('curl-command');
+
+                // Helper to parse CSV simply (sufficient for IP/Hash/Status fields)
+                function parseCSV(text) {{
+                    const lines = text.trim().split(/\\r?\\n/);
+                    if (lines.length < 2) return [];
+                    const headers = lines[0].split(',');
+                    const hashIdx = headers.indexOf('hash');
+                    const ipIdx = headers.indexOf('ip');
+                    const errIdx = headers.indexOf('error');
+                    const statusIdx = headers.indexOf('status_code');
+                    
+                    return lines.slice(1).map(line => {{
+                        const vals = line.split(',');
+                        const obj = {{}};
+                        if (hashIdx > -1) obj.hash = vals[hashIdx];
+                        if (ipIdx > -1) obj.ip = vals[ipIdx];
+                        if (errIdx > -1) obj.error = vals[errIdx];
+                        if (statusIdx > -1) obj.status_code = parseInt(vals[statusIdx]);
+                        return obj;
+                    }});
+                }}
+
+                // Helper to parse YAML (heuristic)
+                function parseYAML(text) {{
+                    const parts = text.split('results:');
+                    if (parts.length < 2) return [];
+                    const resultsBlock = parts[1];
+                    
+                    const items = [];
+                    let currentItem = {{}};
+                    
+                    const lines = resultsBlock.split('\\n');
+                    for (let line of lines) {{
+                        line = line.trim();
+                        if (!line) continue;
+                        
+                        if (line.startsWith('- ')) {{
+                            if (Object.keys(currentItem).length > 0) {{
+                                items.push(currentItem);
+                            }}
+                            currentItem = {{}};
+                            line = line.substring(2);
+                        }}
+                        
+                        const colonIdx = line.indexOf(':');
+                        if (colonIdx > -1) {{
+                            const k = line.substring(0, colonIdx).trim();
+                            const v = line.substring(colonIdx + 1).trim();
+                            currentItem[k] = v;
+                        }}
+                    }}
+                    if (Object.keys(currentItem).length > 0) items.push(currentItem);
+                    return items;
+                }}
+
+                // Shared analysis logic for all formats
+                function performAnalysis(results, hostname, totalTime) {{
+                    let hashValidation = null;
+                    if (results && results.length > 0) {{
+                        const hashes = results
+                            .filter(r => r.hash)
+                            .map(r => r.hash);
+                        
+                        if (hashes.length > 0) {{
+                            const allMatch = hashes.every(h => h === hashes[0]);
+                            const uniqueHashes = [...new Set(hashes)];
+                            
+                            hashValidation = {{
+                                total_ips: results.length,
+                                unique_hashes: uniqueHashes.length,
+                                all_match: allMatch
+                            }};
+                            
+                            if (!allMatch) {{
+                                hashValidation.mismatches = uniqueHashes.map(hash => ({{
+                                    hash: hash,
+                                    ips: results
+                                        .filter(r => r.hash === hash)
+                                        .map(r => r.ip)
+                                }}));
+                            }}
+                        }}
+                    }}
+                    
+                    let summaryHTML = '<div class="result-summary">';
+                    if (hostname) summaryHTML += `<h3>${{hostname}}</h3>`;
+                    
+                    if (results.length > 0) {{
+                         const timeStr = totalTime ? ` in ${{totalTime}}s` : '';
+                         summaryHTML += `<p class="result-detail">Checked ${{results.length}} IP${{results.length !== 1 ? 's' : ''}}${{timeStr}}</p>`;
+                         
+                         if (hashValidation) {{
+                            if (hashValidation.all_match) {{
+                                summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
+                            }} else {{
+                                summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                summaryHTML += `<p class="result-detail">${{hashValidation.unique_hashes}} unique hash${{hashValidation.unique_hashes !== 1 ? 'es' : ''}} found</p>`;
+                            }}
+                        }} else {{
+                            const successCount = results.filter(r => r.status_code == 200 || r.status_code == 301 || r.status_code == 302).length;
+                            const errorCount = results.filter(r => r.error).length;
+                            
+                            if (errorCount === 0 && successCount > 0) {{
+                                summaryHTML += '<p class="result-status success">✓ All requests successful</p>';
+                            }} else if (errorCount > 0) {{
+                                summaryHTML += `<p class="result-status error">✗ ${{errorCount}} error${{errorCount !== 1 ? 's' : ''}}</p>`;
+                            }} else {{
+                                summaryHTML += '<p class="result-detail">No content hashes found</p>';
+                            }}
+                        }}
+                    }} else {{
+                        summaryHTML += '<p class="result-status success">✓ Request successful</p>';
+                        summaryHTML += '<p class="result-detail">(Content analysis available via JSON/YAML parsing)</p>';
+                    }}
+                    
+                    summaryHTML += '</div>';
+                    return summaryHTML;
+                }}
 
                 form.addEventListener('submit', async (event) => {{
                     event.preventDefault();
@@ -312,85 +432,50 @@ def view_eov():
                         }}
 
                         const apiUrl = window.location.origin + '/v1/eov?' + params.toString();
-                        
-                        // Generate curl command
                         curlCommand.value = `curl '${{apiUrl}}'`;
                         
                         const resp = await fetch('/v1/eov?' + params.toString());
                         const text = await resp.text();
                         
-                        if (formatSelect.value === 'json') {{
-                            try {{
-                                const data = JSON.parse(text);
-                                
-                                // Check if all hashes match
-                                let hashValidation = null;
-                                if (data.results && data.results.length > 0) {{
-                                    const hashes = data.results
-                                        .filter(r => r.hash)
-                                        .map(r => r.hash);
-                                    
-                                    if (hashes.length > 0) {{
-                                        const allMatch = hashes.every(h => h === hashes[0]);
-                                        const uniqueHashes = [...new Set(hashes)];
-                                        
-                                        hashValidation = {{
-                                            total_ips: data.results.length,
-                                            unique_hashes: uniqueHashes.length,
-                                            all_match: allMatch
-                                        }};
-                                        
-                                        if (!allMatch) {{
-                                            hashValidation.mismatches = uniqueHashes.map(hash => ({{
-                                                hash: hash,
-                                                ips: data.results
-                                                    .filter(r => r.hash === hash)
-                                                    .map(r => r.ip)
-                                            }}));
-                                        }}
-                                        
-                                        data.hash_validation = hashValidation;
-                                    }}
-                                }}
-                                
-                                // Generate summary HTML
-                                let summaryHTML = '<div class="result-summary">';
-                                summaryHTML += `<h3>${{data.hostname}}</h3>`;
-                                summaryHTML += `<p class="result-detail">Checked ${{data.results.length}} IP${{data.results.length !== 1 ? 's' : ''}} in ${{data.total_time_seconds}}s</p>`;
-                                
-                                if (hashValidation) {{
-                                    if (hashValidation.all_match) {{
-                                        summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
-                                    }} else {{
-                                        summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
-                                        summaryHTML += `<p class="result-detail">${{hashValidation.unique_hashes}} unique hash${{hashValidation.unique_hashes !== 1 ? 'es' : ''}} found</p>`;
-                                    }}
-                                }} else {{
-                                    const successCount = data.results.filter(r => r.status_code === 200 || r.status_code === 301 || r.status_code === 302).length;
-                                    const errorCount = data.results.filter(r => r.error).length;
-                                    if (errorCount === 0 && successCount > 0) {{
-                                        summaryHTML += '<p class="result-status success">✓ All requests successful</p>';
-                                    }} else if (errorCount > 0) {{
-                                        summaryHTML += `<p class="result-status error">✗ ${{errorCount}} error${{errorCount !== 1 ? 's' : ''}}</p>`;
-                                    }}
-                                }}
-                                
-                                summaryHTML += '</div>';
-                                summary.innerHTML = summaryHTML;
-                                
-                                // Populate full results
-                                output.value = JSON.stringify(data, null, 2);
-                                fullResultsDrawer.style.display = 'block';
-                            }} catch (parseErr) {{
-                                summary.innerHTML = `<p class="result-status error">Error parsing response</p>`;
-                                output.value = text;
-                                fullResultsDrawer.style.display = 'block';
-                            }}
-                        }} else {{
-                            summary.innerHTML = `<p class="result-detail" style="text-align: center;">Response received (${{formatSelect.value.toUpperCase()}})</p>`;
-                            output.value = text;
-                            fullResultsDrawer.style.display = 'block';
+                        fullResultsSummary.textContent = `Full Results (${{formatSelect.value.toUpperCase()}})`;
+                        output.value = text;
+                        fullResultsDrawer.style.display = 'block';
+
+                        if (!resp.ok) {{
+                             summary.innerHTML = `<p class="result-status error">Request failed (${{resp.status}})</p>`;
+                             submitBtn.disabled = false;
+                             return;
                         }}
+
+                        let results = [];
+                        let hostname = new URL(targetUrl).hostname;
+                        let totalTime = null;
+
+                        try {{
+                            if (formatSelect.value === 'json') {{
+                                const data = JSON.parse(text);
+                                results = data.results || [];
+                                hostname = data.hostname;
+                                totalTime = data.total_time_seconds;
+                                output.value = JSON.stringify(data, null, 2);
+                            }} else if (formatSelect.value === 'csv') {{
+                                results = parseCSV(text);
+                            }} else if (formatSelect.value === 'yaml') {{
+                                results = parseYAML(text);
+                            }}
+                            
+                            summary.innerHTML = performAnalysis(results, hostname, totalTime);
+
+                        }} catch (parseErr) {{
+                            console.error(parseErr);
+                            summary.innerHTML = `
+                                <div class="result-summary">
+                                    <h3>${{hostname}}</h3>
+                                    <p class="result-status success">✓ Request successful</p>
+                                    <p class="result-detail" style="font-size: 0.8em">Analysis failed (Parse Error)</p>
+                                </div>`;
+                        }}
+
                     }} catch (err) {{
                         summary.innerHTML = `<p class="result-status error">Request failed: ${{err}}</p>`;
                     }} finally {{
