@@ -13,6 +13,7 @@ import socket
 import yaml
 import csv
 import io
+import concurrent.futures
 
 # Disable SSL warnings when using verify=False
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -21,6 +22,23 @@ app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 # Base64 encoded ASCII art
 encoded_ascii = "Li0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0uCnwgTmV2ZXIgZ29ubmEgZ2l2ZSB5b3UgdXAgICAgICAgICAgfAp8IE5ldmVyIGdvbm5hIGxldCB5b3UgZG93biAgICAgICAgIHwKfCBOZXZlciBnb25uYSBydW4gYXJvdW5kIGFuZCBkZXNlcnR8CnwgeW91ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfAonLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLScKICAgICAgICAgICAgLj0oKCg9LiAgICAgICAKICAgICAgICAgIGk7JyAgIGA6aSAgICAgIAogICAgICAgICAgIV9fICAgX18hICAgICAgCiAgICAgICAgICh+KF8pLShfKX4pICAgICAKICAgICAgICAgIHwgICBuICAgwqEgICAgICAKICAgICAgICAgIFwgIC0gIC8gICAgICAgCiAgICAgICAgICAhYC0tLSchICAgICAgIAogICAgICAgICAgL2AtLl8uLSdcICAgICAgCiAgICBfLi1+J1xfLyB8b1xfL2B+LS5fIAogICAgJyAgICAgICAgfG8gICAgICAgIGAKICAgIFwuICAgICAgX3xfICAgICAgLi8gCiAgICAgIGAtLiAgICAgICAgICAuLScgICAKICAgIGB+LS0tLS0tficK"
+
+class SniAdapter(HTTPAdapter):
+    """
+    Adapter to force a specific server_hostname (SNI) 
+    while connecting to a direct IP address in the URL.
+    """
+    def __init__(self, sni_hostname, **kwargs):
+        self.sni_hostname = sni_hostname
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        # Inject the SNI hostname into the SSL context of the pool
+        pool_kwargs['server_hostname'] = self.sni_hostname
+        # Note: assert_hostname is usually for verifying the cert matches the hostname.
+        # Since we use verify=False often in this tool, this ensures the handshake uses the right name.
+        pool_kwargs['assert_hostname'] = self.sni_hostname
+        super().init_poolmanager(connections, maxsize, block, **pool_kwargs)
 
 @app.route("/favicon.ico")
 def favicon():
@@ -56,6 +74,65 @@ def r2():
     """
     return Response(html, mimetype="text/html")
 
+def check_single_ip(ip, url, hostname, scheme, timeout, hash_func, hash_alg, expected_hash):
+    """
+    Helper function to check a single IP. 
+    Designed to be run in a thread.
+    """
+    result = {
+        'ip': ip,
+        'status_code': None,
+        'hash': None,
+        'hash_alg': hash_alg
+    }
+    
+    try:
+        session = requests.Session()
+        
+        if scheme == 'https':
+            # Use the SniAdapter to connect to the IP but send the correct Hostname in SNI
+            # Mount it to the specific IP URL structure
+            prefix = f"https://{ip}"
+            adapter = SniAdapter(sni_hostname=hostname)
+            session.mount(prefix, adapter)
+            
+            # Construct URL using IP but keeping path/query
+            # We replace hostname with IP in the URL
+            target_url = url.replace(hostname, ip, 1)
+            
+            # Host header is still good practice even with SNI
+            response = session.get(
+                target_url, 
+                headers={'Host': hostname}, 
+                timeout=timeout, 
+                allow_redirects=True, 
+                verify=False
+            )
+        else:
+            # For HTTP, simple replacement works fine
+            target_url = url.replace(hostname, ip, 1)
+            response = session.get(
+                target_url,
+                headers={'Host': hostname},
+                timeout=timeout,
+                allow_redirects=True
+            )
+        
+        # Compute hash of content
+        content_hash = hash_func(response.content).hexdigest()
+        
+        result['status_code'] = response.status_code
+        result['hash'] = content_hash
+        
+        # Compare with expected hash if provided
+        if expected_hash:
+            result['hash_matches'] = (content_hash == expected_hash)
+            
+    except Exception as e:
+        result['error'] = str(e)
+        
+    return result
+
 @app.route("/v1/eov")
 def v1_eov():
     """
@@ -67,8 +144,7 @@ def v1_eov():
     timeout = int(request.args.get('timeout', 33))
     format = request.args.get('format', 'json').lower()
     
-    # Simple Security Guardrail: Prevent scanning localhost or metadata services
-    # (Note: A robust production app needs a more comprehensive blocklist)
+    # Simple Security Guardrail
     forbidden_hosts = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254']
     
     # Record start time
@@ -84,7 +160,8 @@ def v1_eov():
     # Parse URL
     parsed = urlparse(url)
     hostname = parsed.hostname
-    protocol = 443 if parsed.scheme == 'https' else 80
+    scheme = parsed.scheme
+    protocol = 443 if scheme == 'https' else 80
     
     if not hostname or hostname in forbidden_hosts:
         return jsonify({'error': 'Invalid or forbidden hostname'}), 400
@@ -109,62 +186,26 @@ def v1_eov():
     
     results = []
     
-    # Check each IP
-    for ip in ips:
-        try:
-            # Create a session with custom DNS resolution
-            session = requests.Session()
-            
-            # For HTTPS, we need to connect to IP but use hostname for SNI
-            if parsed.scheme == 'https':
-                session.mount('https://', HTTPAdapter())
-                
-                # Monkey patch for this specific request
-                # NOTE: This is a hacky way to force DNS resolution for SNI requests
-                original_getaddrinfo = socket.getaddrinfo
-                def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-                    if host == hostname:
-                        # Return our specific IP
-                        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (ip, port))]
-                    return original_getaddrinfo(host, port, family, type, proto, flags)
-                
-                socket.getaddrinfo = patched_getaddrinfo
-                try:
-                    response = session.get(url, timeout=timeout, allow_redirects=True, verify=False)
-                finally:
-                    socket.getaddrinfo = original_getaddrinfo
-            else:
-                # For HTTP, simple replacement works fine
-                ip_url = url.replace(hostname, ip)
-                response = session.get(
-                    ip_url,
-                    headers={'Host': hostname},
-                    timeout=timeout,
-                    allow_redirects=True
-                )
-            
-            # Compute hash of content
-            content_hash = hash_func(response.content).hexdigest()
-            
-            result = {
-                'ip': ip,
-                'status_code': response.status_code,
-                'hash': content_hash,
-                'hash_alg': hash_alg
-            }
-            
-            # Compare with expected hash if provided
-            if expected_hash:
-                result['hash_matches'] = (content_hash == expected_hash)
-            
-            results.append(result)
-            
-        except Exception as e:
-            results.append({
-                'ip': ip,
-                'error': str(e)
-            })
+    # Use ThreadPoolExecutor for parallel execution
+    # Limit max_workers to avoid exhausting system resources
+    max_workers = min(len(ips), 20)
     
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_ip = {
+            executor.submit(
+                check_single_ip, 
+                ip, url, hostname, scheme, timeout, hash_func, hash_alg, expected_hash
+            ): ip for ip in ips
+        }
+        
+        # Collect results as they complete (order doesn't strictly matter, but usually we want list order)
+        # We'll just collect them and then sort by IP if needed, or leave as is.
+        for future in concurrent.futures.as_completed(future_to_ip):
+            results.append(future.result())
+    
+    # Sort results by IP for consistency
+    results.sort(key=lambda x: x['ip'])
+
     # Calculate total time
     end_time = time.time()
     total_time = round(end_time - start_time, 3)
@@ -209,6 +250,26 @@ def view_eov():
             <title>View EOV</title>
             <link rel="shortcut icon" href="{favicon_url}">
             <link rel="stylesheet" href="{style_url}">
+            <style>
+                /* Add a simple spinner */
+                .spinner {{
+                    display: inline-block;
+                    width: 20px;
+                    height: 20px;
+                    border: 3px solid rgba(255,255,255,.3);
+                    border-radius: 50%;
+                    border-top-color: #fff;
+                    animation: spin 1s ease-in-out infinite;
+                    margin-right: 8px;
+                    vertical-align: middle;
+                }}
+                @keyframes spin {{
+                    to {{ transform: rotate(360deg); }}
+                }}
+                .hidden {{
+                    display: none;
+                }}
+            </style>
         </head>
         <body>
             <div class="panel">
@@ -279,7 +340,6 @@ def view_eov():
                 const submitBtn = document.getElementById('submit');
                 const summary = document.getElementById('summary');
                 const fullResultsDrawer = document.getElementById('full-results-drawer');
-                // Select the summary element inside the details drawer to update its title
                 const fullResultsSummary = fullResultsDrawer.querySelector('summary'); 
                 const output = document.getElementById('output');
                 const hashInput = document.getElementById('hash');
@@ -288,7 +348,6 @@ def view_eov():
                 const formatSelect = document.getElementById('format');
                 const curlCommand = document.getElementById('curl-command');
 
-                // Helper to parse CSV simply (sufficient for IP/Hash/Status fields)
                 function parseCSV(text) {{
                     const lines = text.trim().split(/\\r?\\n/);
                     if (lines.length < 2) return [];
@@ -309,7 +368,6 @@ def view_eov():
                     }});
                 }}
 
-                // Helper to parse YAML (heuristic)
                 function parseYAML(text) {{
                     const parts = text.split('results:');
                     if (parts.length < 2) return [];
@@ -342,7 +400,6 @@ def view_eov():
                     return items;
                 }}
 
-                // Shared analysis logic for all formats
                 function performAnalysis(results, hostname, totalTime, expectedHash) {{
                     let hashValidation = null;
                     if (results && results.length > 0) {{
@@ -380,7 +437,6 @@ def view_eov():
                          
                          if (hashValidation) {{
                             if (expectedHash) {{
-                                // Validate against expected hash
                                 const normExpected = expectedHash.toLowerCase().trim();
                                 const normHashes = results.filter(r => r.hash).map(r => r.hash.toLowerCase());
                                 const allMatchExpected = normHashes.every(h => h === normExpected);
@@ -388,11 +444,9 @@ def view_eov():
                                 if (allMatchExpected) {{
                                     summaryHTML += '<p class="result-status success">✓ All hashes match expected value</p>';
                                 }} else {{
-                                    // Check if they are consistent with each other, but wrong
                                     const allConsistent = normHashes.every(h => h === normHashes[0]);
                                     if (allConsistent) {{
                                          summaryHTML += '<p class="result-status error">✗ Hash does not match expected value</p>';
-                                         // Show the first few chars of actual vs expected
                                          summaryHTML += `<p class="result-detail">Expected: ${{expectedHash.substring(0, 16)}}...<br>Actual: ${{results[0].hash.substring(0, 16)}}...</p>`;
                                     }} else {{
                                          summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
@@ -405,7 +459,6 @@ def view_eov():
                                     }}
                                 }}
                             }} else {{
-                                // Standard consistency check (no expected hash)
                                 if (hashValidation.all_match) {{
                                     summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
                                 }} else {{
@@ -414,7 +467,6 @@ def view_eov():
                                 }}
                             }}
                         }} else {{
-                            // No hashes found (e.g. errors)
                             const successCount = results.filter(r => r.status_code == 200 || r.status_code == 301 || r.status_code == 302).length;
                             const errorCount = results.filter(r => r.error).length;
                             
@@ -444,7 +496,10 @@ def view_eov():
                     }}
 
                     submitBtn.disabled = true;
-                    summary.innerHTML = '<p style="text-align: center; color: var(--muted);">Running /v1/eov...</p>';
+                    // Add spinner logic
+                    const originalBtnText = submitBtn.innerHTML;
+                    submitBtn.innerHTML = '<span class="spinner"></span>Running...';
+                    summary.innerHTML = '<p style="text-align: center; color: var(--muted);">Resolving IPs and fetching content...</p>';
                     fullResultsDrawer.style.display = 'none';
 
                     try {{
@@ -472,7 +527,6 @@ def view_eov():
 
                         if (!resp.ok) {{
                              summary.innerHTML = `<p class="result-status error">Request failed (${{resp.status}})</p>`;
-                             submitBtn.disabled = false;
                              return;
                         }}
 
@@ -509,6 +563,7 @@ def view_eov():
                         summary.innerHTML = `<p class="result-status error">Request failed: ${{err}}</p>`;
                     }} finally {{
                         submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
                     }}
                 }});
 
