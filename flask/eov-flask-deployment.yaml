@@ -8,19 +8,19 @@ kind: Deployment
 metadata:
   name: eov-flask
   labels:
-    app: flask-rr
+    app: flask-eov
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: flask-rr
+      app: flask-eov
   template:
     metadata:
       labels:
-        app: flask-rr
+        app: flask-eov
     spec:
       containers:
-      - name: flask-rr
+      - name: flask-eov
         # Using image from registry
         image: gitea.ser.ink/ser/eov-flask:latest
         imagePullPolicy: Always
@@ -61,7 +61,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    app: flask-rr
+    app: flask-eov
   ports:
   - name: http
     port: 80
