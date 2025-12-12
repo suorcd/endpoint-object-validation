@@ -20,7 +20,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 # Base64 encoded ASCII art
-encoded_ascii = "ICAgIC4tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLgogICAgICAgICAgICAgIHwgTmV2ZXIgZ29ubmEgZ2l2ZSB5b3UgdXAgICAgICAgICAgfAogICAgICAgICAgICAgIHwgTmV2ZXIgZ29ubmEgbGV0IHlvdSBkb3duICAgICAgICAgfAogICAgICAgICAgICAgIHwgTmV2ZXIgZ29ubmEgcnVuIGFyb3VuZCBhbmQgZGVzZXJ0fAogICAgICAgICAgICAgIHwgeW91ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfAogICAgICAgICAgICAgICctLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tJwogICAgICAgICAgICAgICAgICAgICAgICAgLj0oKCg9LiAgICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgaTsnICAgYDppICAgICAgCiAgICAgICAgICAgICAgICAgICAgICAgICFfXyAgIF9fISAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICh+KF8pLShfKX4pICAgICAKICAgICAgICAgICAgICAgICAgICAgICAgfCAgIG4gICDCoSAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICBcICAtICAvICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAhYC0tLSchICAgICAgIAogICAgICAgICAgICAgICAgICAgICAgICAvYC0uXy4tJ1wgICAgICAKICAgICAgICAgICAgICAgICAgXy4tfidcXy8gfG9cXy9gfi0uXyAKICAgICAgICAgICAgICAgICAgJyAgICAgICAgfG8gICAgICAgIGAKICAgICAgICAgICAgICAgICAgXC4gICAgICBffF8gICAgICAuLyAKICAgICAgICAgICAgICAgICAgICBgLS4gICAgICAgICAgLi0nICAgCiAgICAgICAgICAgICAgICAgIGB+LS0tLS0tficK"
+encoded_ascii = "Li0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0uCnwgTmV2ZXIgZ29ubmEgZ2l2ZSB5b3UgdXAgICAgICAgICAgfAp8IE5ldmVyIGdvbm5hIGxldCB5b3UgZG93biAgICAgICAgIHwKfCBOZXZlciBnb25uYSBydW4gYXJvdW5kIGFuZCBkZXNlcnR8CnwgeW91ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfAonLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLScKICAgICAgICAgICAgLj0oKCg9LiAgICAgICAKICAgICAgICAgIGk7JyAgIGA6aSAgICAgIAogICAgICAgICAgIV9fICAgX18hICAgICAgCiAgICAgICAgICh+KF8pLShfKX4pICAgICAKICAgICAgICAgIHwgICBuICAgwqEgICAgICAKICAgICAgICAgIFwgIC0gIC8gICAgICAgCiAgICAgICAgICAhYC0tLSchICAgICAgIAogICAgICAgICAgL2AtLl8uLSdcICAgICAgCiAgICBfLi1+J1xfLyB8b1xfL2B+LS5fIAogICAgJyAgICAgICAgfG8gICAgICAgIGAKICAgIFwuICAgICAgX3xfICAgICAgLi8gCiAgICAgIGAtLiAgICAgICAgICAuLScgICAKICAgIGB+LS0tLS0tficK"
 
 @app.route("/favicon.ico")
 def favicon():
@@ -31,21 +31,27 @@ def r2():
     # Decode the base64 ASCII art
     ascii_art = base64.b64decode(encoded_ascii).decode('utf-8')
     favicon_url = url_for('static', filename='favicon.ico', _scheme=request.scheme, _external=True)
+    style_url = url_for('static', filename='style.css', _scheme=request.scheme, _external=True)
     html = f"""<!DOCTYPE html>
     <html>
-      <head>
-                <title>
-                    eov-flask
-                </title>
-        <link rel="shortcut icon" href="{favicon_url}">
-      </head>
-      <body>
-        <center>
-        <pre>
-          {ascii_art}
-        </pre>
-        </center>
-      </body>
+        <head>
+            <title>eov-flask</title>
+            <link rel="shortcut icon" href="{favicon_url}">
+            <link rel="stylesheet" href="{style_url}">
+            <style>
+                pre {{
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                    text-align: center;
+                    margin: 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="panel">
+                <pre>{ascii_art}</pre>
+            </div>
+        </body>
     </html>
     """
     return Response(html, mimetype="text/html")
