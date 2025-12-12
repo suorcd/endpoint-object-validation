@@ -2,54 +2,54 @@
 
 This repository provides endpoint object validation in two implementations:
 
-1. **Bash Script (`eov.sh`)** - Lightweight CLI tool
-2. **Flask Web Service** - HTTP API with Kubernetes deployment
+1. **Bash Script (`eov.sh`)** — Lightweight CLI tool
+2. **Flask Web Service** — HTTP API with Kubernetes deployment (implements `/v1/eov`)
 
-## Bash Script Usage
+## Bash Script Usage (`eov.sh`)
 
-```shell
+```bash
 ./eov.sh <URL> [--hash HASH] [--file FILE] [--hash-alg HASH_ALG] [--debug]
 
+# Examples
+./eov.sh http://example.com
+./eov.sh http://example.com --hash d41d8cd98f00b204e9800998ecf8427e
+./eov.sh http://example.com --file /path/to/file
+./eov.sh http://example.com --hash-alg sha512
+./eov.sh http://example.com --debug
+```
 
-## nix Usage
+**Arguments**
+- `--hash HASH` — compare downloaded content hash against expected
+- `--file FILE` — compute hash from local file instead of remote content
+- `--hash-alg HASH_ALG` — hashing command prefix (default `md5`; expects `<alg>sum` to exist)
+- `--debug` — verbose output and directory traversal
 
-To use the `eov.sh` script, follow the instructions below:
+**Requirements**
+- `curl`, `drill`, and the chosen hash utility (e.g., `md5sum`, `sha256sum`)
+- DNS and HTTP(S) egress to the target hostname
+- Bash shell
 
-### Building the Package
+## Nix Usage
 
-1. **Build the package using Nix Flakes**:
-   ```shell
-   nix build
-   ```
+Build and run via flakes:
 
-Examples
-Basic Usage:
-`./result/bin/eov.sh http://example.com`
-With Hash Comparison:
-`./result/bin/eov.sh http://example.com --hash d41d8cd98f00b204e9800998ecf8427e`
-With File Hash Comparison:
-`./result/bin/eov.sh http://example.com --file /path/to/file`
-With Custom Hash Algorithm:
-`./result/bin/eov.sh http://example.com --hash-alg sha512`
-With Debug Mode:
-`./result/bin/eov.sh http://example.com --debug`
+```bash
+nix build
+./result/bin/eov.sh <URL> [flags]
+```
 
+For development:
 
+```bash
+nix develop   # enter shell with dependencies
+./eov.sh <URL> --debug
+```
 
-### nix Explanation
-
-1. **Building the Package**: Instructions to build the package using Nix Flakes.
-2. **Running the Script**: Instructions to run the script from the built package.
-3. **Arguments**: Detailed explanation of the command-line arguments.
-4. **Examples**: Usage examples demonstrating different ways to use the script.
-````
+## Developing `eov.sh`
+- Run locally with `--debug` to inspect workdir and resolved IPs.
+- Validate hashes by providing `--hash` or `--file` (the script uses `<hash_alg>sum`).
+- If using ShellCheck, address warnings before committing (no config required here).
 
 ## Flask Web Service
-See [flask/README.md](flask/README.md) for the Flask implementation with:
-- HTTP API endpoint for object validation
-- Kubernetes deployment configurations
-- Tailscale integration
-- Development and production setup
 
-## Development with Nix
-[...]
+For an HTTP API version of EOV, see `flask/README.md`. The Flask app exposes `/v1/eov` with parity to the bash script and includes Kubernetes and Tailscale deployment guides.
