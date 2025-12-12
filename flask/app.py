@@ -343,7 +343,7 @@ def view_eov():
                 }}
 
                 // Shared analysis logic for all formats
-                function performAnalysis(results, hostname, totalTime) {{
+                function performAnalysis(results, hostname, totalTime, expectedHash) {{
                     let hashValidation = null;
                     if (results && results.length > 0) {{
                         const hashes = results
@@ -379,13 +379,42 @@ def view_eov():
                          summaryHTML += `<p class="result-detail">Checked ${{results.length}} IP${{results.length !== 1 ? 's' : ''}}${{timeStr}}</p>`;
                          
                          if (hashValidation) {{
-                            if (hashValidation.all_match) {{
-                                summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
+                            if (expectedHash) {{
+                                // Validate against expected hash
+                                const normExpected = expectedHash.toLowerCase().trim();
+                                const normHashes = results.filter(r => r.hash).map(r => r.hash.toLowerCase());
+                                const allMatchExpected = normHashes.every(h => h === normExpected);
+                                
+                                if (allMatchExpected) {{
+                                    summaryHTML += '<p class="result-status success">✓ All hashes match expected value</p>';
+                                }} else {{
+                                    // Check if they are consistent with each other, but wrong
+                                    const allConsistent = normHashes.every(h => h === normHashes[0]);
+                                    if (allConsistent) {{
+                                         summaryHTML += '<p class="result-status error">✗ Hash does not match expected value</p>';
+                                         // Show the first few chars of actual vs expected
+                                         summaryHTML += `<p class="result-detail">Expected: ${{expectedHash.substring(0, 16)}}...<br>Actual: ${{results[0].hash.substring(0, 16)}}...</p>`;
+                                    }} else {{
+                                         summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                         const matchCount = normHashes.filter(h => h === normExpected).length;
+                                         if (matchCount > 0) {{
+                                            summaryHTML += `<p class="result-detail">${{matchCount}} IP(s) match expectation<br>${{results.length - matchCount}} IP(s) mismatch</p>`;
+                                         }} else {{
+                                            summaryHTML += `<p class="result-detail">No IPs match expected hash</p>`;
+                                         }}
+                                    }}
+                                }}
                             }} else {{
-                                summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
-                                summaryHTML += `<p class="result-detail">${{hashValidation.unique_hashes}} unique hash${{hashValidation.unique_hashes !== 1 ? 'es' : ''}} found</p>`;
+                                // Standard consistency check (no expected hash)
+                                if (hashValidation.all_match) {{
+                                    summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
+                                }} else {{
+                                    summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                    summaryHTML += `<p class="result-detail">${{hashValidation.unique_hashes}} unique hash${{hashValidation.unique_hashes !== 1 ? 'es' : ''}} found</p>`;
+                                }}
                             }}
                         }} else {{
+                            // No hashes found (e.g. errors)
                             const successCount = results.filter(r => r.status_code == 200 || r.status_code == 301 || r.status_code == 302).length;
                             const errorCount = results.filter(r => r.error).length;
                             
@@ -464,7 +493,7 @@ def view_eov():
                                 results = parseYAML(text);
                             }}
                             
-                            summary.innerHTML = performAnalysis(results, hostname, totalTime);
+                            summary.innerHTML = performAnalysis(results, hostname, totalTime, hashValue);
 
                         }} catch (parseErr) {{
                             console.error(parseErr);
