@@ -216,7 +216,7 @@ def view_eov():
                 <form id="eov-form">
                     <label for="url">Target URL</label>
                     <div class="url-input-group">
-                        <input id="url" name="url" type="text" placeholder="https://example.com" required>
+                        <input id="url" name="url" type="text" placeholder="https://example.com/example.jpg" required>
                         <button id="submit" type="submit">Run /v1/eov</button>
                     </div>
                 </form>
