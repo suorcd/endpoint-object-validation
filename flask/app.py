@@ -251,6 +251,13 @@ def view_eov():
                     </details>
                 </form>
                 <textarea id="output" readonly placeholder="Results will appear here..."></textarea>
+                
+                <details class="options-drawer">
+                    <summary>Curl Command</summary>
+                    <div class="options-content">
+                        <input id="curl-command" type="text" readonly placeholder="Run a query to generate the curl command...">
+                    </div>
+                </details>
             </div>
 
             <script>
@@ -262,6 +269,7 @@ def view_eov():
                 const hashAlgSelect = document.getElementById('hash-alg');
                 const timeoutInput = document.getElementById('timeout');
                 const formatSelect = document.getElementById('format');
+                const curlCommand = document.getElementById('curl-command');
 
                 form.addEventListener('submit', async (event) => {{
                     event.preventDefault();
@@ -287,6 +295,11 @@ def view_eov():
                             params.append('hash', hashValue);
                         }}
 
+                        const apiUrl = window.location.origin + '/v1/eov?' + params.toString();
+                        
+                        // Generate curl command
+                        curlCommand.value = `curl '${{apiUrl}}'`;
+                        
                         const resp = await fetch('/v1/eov?' + params.toString());
                         const text = await resp.text();
                         

@@ -157,13 +157,19 @@ a#pi-link {
 
 .option-group input[type="text"],
 .option-group input[type="number"],
-.option-group select {
+.option-group select,
+#curl-command {
     padding: 8px 10px;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: var(--panel);
     color: var(--text);
     font-family: monospace;
+}
+
+#curl-command {
+    width: 100%;
+    font-size: 0.9em;
 }
 
 .option-group select {
