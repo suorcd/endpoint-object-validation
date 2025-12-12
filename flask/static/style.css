@@ -99,3 +99,10 @@ a#pi-link {
     cursor: default;
     user-select: none;
 }
+
+.easter-egg {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    font-size: 12px;
+}

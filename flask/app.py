@@ -220,7 +220,7 @@ def view_eov():
                 </form>
                 <textarea id="output" readonly placeholder="Results will appear here..."></textarea>
             </div>
-            <div style="position: fixed; bottom: 10px; right: 10px; font-size: 12px;">
+            <div class="easter-egg">
                 <a id="pi-link" href="/r2.html" title="Dale: Click it and then press Ctrl+Shift">π</a>
             </div>
             <script>
