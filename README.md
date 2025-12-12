@@ -1,17 +1,19 @@
-# Endpoint Check Script
+# Endpoint Object Validation
 
-This script checks the availability of a given URL by resolving its hostname to IP addresses and downloading the content from each IP address.
-It can also compute and compare hash values (e.g., `md5`, `sha512`) of the downloaded content.
+This repository provides endpoint object validation in two implementations:
 
-## Usage
+1. **Bash Script (`eov.sh`)** - Lightweight CLI tool
+2. **Flask Web Service** - HTTP API with Kubernetes deployment
+
+## Bash Script Usage
 
 ```shell
-./epc.sh <URL> [--hash HASH] [--file FILE] [--hash-alg HASH_ALG] [--debug]
+./eov.sh <URL> [--hash HASH] [--file FILE] [--hash-alg HASH_ALG] [--debug]
 
 
 ## nix Usage
 
-To use the `epc.sh` script, follow the instructions below:
+To use the `eov.sh` script, follow the instructions below:
 
 ### Building the Package
 
@@ -22,15 +24,15 @@ To use the `epc.sh` script, follow the instructions below:
 
 Examples
 Basic Usage:
-`./result/bin/epc.sh http://example.com`
+`./result/bin/eov.sh http://example.com`
 With Hash Comparison:
-`./result/bin/epc.sh http://example.com --hash d41d8cd98f00b204e9800998ecf8427e`
+`./result/bin/eov.sh http://example.com --hash d41d8cd98f00b204e9800998ecf8427e`
 With File Hash Comparison:
-`./result/bin/epc.sh http://example.com --file /path/to/file`
+`./result/bin/eov.sh http://example.com --file /path/to/file`
 With Custom Hash Algorithm:
-`./result/bin/epc.sh http://example.com --hash-alg sha512`
+`./result/bin/eov.sh http://example.com --hash-alg sha512`
 With Debug Mode:
-`./result/bin/epc.sh http://example.com --debug`
+`./result/bin/eov.sh http://example.com --debug`
 
 
 
@@ -40,3 +42,14 @@ With Debug Mode:
 2. **Running the Script**: Instructions to run the script from the built package.
 3. **Arguments**: Detailed explanation of the command-line arguments.
 4. **Examples**: Usage examples demonstrating different ways to use the script.
+````
+
+## Flask Web Service
+See [flask/README.md](flask/README.md) for the Flask implementation with:
+- HTTP API endpoint for object validation
+- Kubernetes deployment configurations
+- Tailscale integration
+- Development and production setup
+
+## Development with Nix
+[...]
