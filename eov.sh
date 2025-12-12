@@ -42,7 +42,7 @@ if [[ -n "${FILE}" ]]; then
 fi
 
 # setup tmp dir
-WORKDIR="/tmp/epc/${EPOCHTIME}"
+WORKDIR="/tmp/eov/${EPOCHTIME}"
 mkdir -p "${WORKDIR}"
 if [[ "${DEBUG}" == true ]]; then
     pushd "${WORKDIR}" || exit
