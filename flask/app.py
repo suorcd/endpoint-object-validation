@@ -83,7 +83,8 @@ def check_single_ip(ip, url, hostname, scheme, timeout, hash_func, hash_alg, exp
         'ip': ip,
         'status_code': None,
         'hash': None,
-        'hash_alg': hash_alg
+        'hash_alg': hash_alg,
+        'file_size_bytes': None
     }
     
     try:
@@ -118,11 +119,14 @@ def check_single_ip(ip, url, hostname, scheme, timeout, hash_func, hash_alg, exp
                 allow_redirects=True
             )
         
-        # Compute hash of content
-        content_hash = hash_func(response.content).hexdigest()
+        # Get content and compute hash
+        content = response.content
+        content_hash = hash_func(content).hexdigest()
+        file_size = len(content)
         
         result['status_code'] = response.status_code
         result['hash'] = content_hash
+        result['file_size_bytes'] = file_size
         
         # Compare with expected hash if provided
         if expected_hash:
@@ -198,8 +202,7 @@ def v1_eov():
             ): ip for ip in ips
         }
         
-        # Collect results as they complete (order doesn't strictly matter, but usually we want list order)
-        # We'll just collect them and then sort by IP if needed, or leave as is.
+        # Collect results as they complete
         for future in concurrent.futures.as_completed(future_to_ip):
             results.append(future.result())
     
