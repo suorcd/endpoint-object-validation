@@ -197,6 +197,19 @@ a#pi-link {
     width: 100%;
 }
 
+.help-text {
+    text-align: center;
+    color: var(--muted);
+}
+
+.help-text p {
+    margin: 0;
+}
+
+.help-text strong {
+    color: var(--text);
+}
+
 .result-summary h3 {
     margin: 0 0 8px 0;
     color: var(--accent-strong);
