@@ -219,39 +219,39 @@ def view_eov():
                         <input id="url" name="url" type="text" placeholder="https://example.com" required>
                         <button id="submit" type="submit">Run /v1/eov</button>
                     </div>
-                    
-                    <details class="options-drawer">
-                        <summary>Advanced Options</summary>
-                        <div class="options-content">
-                            <div class="option-group">
-                                <label for="hash">Expected Hash (optional)</label>
-                                <input id="hash" name="hash" type="text" placeholder="e.g., d41d8cd98f00b204e9800998ecf8427e">
-                            </div>
-                            <div class="option-group">
-                                <label for="hash-alg">Hash Algorithm</label>
-                                <select id="hash-alg" name="hash-alg">
-                                    <option value="md5" selected>MD5</option>
-                                    <option value="sha1">SHA1</option>
-                                    <option value="sha256">SHA256</option>
-                                </select>
-                            </div>
-                            <div class="option-group">
-                                <label for="timeout">Timeout (seconds)</label>
-                                <input id="timeout" name="timeout" type="number" value="33" min="1" max="300">
-                            </div>
-                            <div class="option-group">
-                                <label for="format">Response Format</label>
-                                <select id="format" name="format">
-                                    <option value="json" selected>JSON</option>
-                                    <option value="yaml">YAML</option>
-                                    <option value="csv">CSV</option>
-                                </select>
-                            </div>
-                        </div>
-                    </details>
                 </form>
                 
                 <div id="summary" class="summary-output"></div>
+                
+                <details class="options-drawer">
+                    <summary>Advanced Options</summary>
+                    <div class="options-content">
+                        <div class="option-group">
+                            <label for="hash">Expected Hash (optional)</label>
+                            <input id="hash" name="hash" type="text" placeholder="e.g., d41d8cd98f00b204e9800998ecf8427e">
+                        </div>
+                        <div class="option-group">
+                            <label for="hash-alg">Hash Algorithm</label>
+                            <select id="hash-alg" name="hash-alg">
+                                <option value="md5" selected>MD5</option>
+                                <option value="sha1">SHA1</option>
+                                <option value="sha256">SHA256</option>
+                            </select>
+                        </div>
+                        <div class="option-group">
+                            <label for="timeout">Timeout (seconds)</label>
+                            <input id="timeout" name="timeout" type="number" value="33" min="1" max="300">
+                        </div>
+                        <div class="option-group">
+                            <label for="format">Response Format</label>
+                            <select id="format" name="format">
+                                <option value="json" selected>JSON</option>
+                                <option value="yaml">YAML</option>
+                                <option value="csv">CSV</option>
+                            </select>
+                        </div>
+                    </div>
+                </details>
                 
                 <details id="full-results-drawer" class="options-drawer" style="display: none;">
                     <summary>Full Results (JSON)</summary>
