@@ -45,6 +45,23 @@ nix develop   # enter shell with dependencies
 ./eov.sh <URL> --debug
 ```
 
+Dev shells (choose one):
+
+```bash
+# Default (Flask + bash tools)
+nix develop
+
+# Bash-only shell
+nix develop .#bash
+
+# Flask-focused shell
+nix develop .#flask
+
+# Run Flask dev server from any shell
+cd flask
+flask --app app run --host=0.0.0.0 --port=5000 --debug
+```
+
 ## Developing `eov.sh`
 - Run locally with `--debug` to inspect workdir and resolved IPs.
 - Validate hashes by providing `--hash` or `--file` (the script uses `<hash_alg>sum`).

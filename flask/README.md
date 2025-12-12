@@ -10,6 +10,16 @@ flask --app app run --host=0.0.0.0 --port=5000 --debug   # hot reload
 ```
 Visit http://localhost:5000
 
+## Nix dev shell
+```bash
+cd ..               # repo root
+nix develop         # default dev shell (Flask + bash tools)
+# or pick a focused shell
+nix develop .#flask # Flask-focused
+cd flask
+flask --app app run --host=0.0.0.0 --port=5000 --debug
+```
+
 ## Files Included
 - `eov-flask-deployment.yaml` — Flask app deployment and ConfigMap
 - `eov-flask-ingress.yaml` — ingress routing to the Flask service
