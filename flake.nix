@@ -89,6 +89,13 @@
               echo "Container testing:"
               echo "  cd flask && docker build -t eov-flask:latest ."
               echo "  docker run -p 5000:5000 eov-flask:latest"
+              echo ""
+              echo "K3s Deployment:"
+              echo "  cd flask"
+              echo "  ./deploy.sh              # automated deployment"
+              echo "  ./k3s_image_push.sh      # push image to nodes (automated option)"
+              echo "  ./tailscale-setup.sh     # add Tailscale proxy (optional)"
+              echo "  ./status.sh              # check deployment status"
             '';
 
             FLASK_APP = "app.py";
@@ -121,8 +128,15 @@
               echo "  docker build -t eov-flask:latest ."
               echo "  docker run -p 5000:5000 eov-flask:latest"
               echo ""
-              echo "Deployment commands:"
-              echo "  cd flask && ./deploy.sh [--tailscale]"
+              echo "K3s Deployment (from flask/):"
+              echo "  ./deploy.sh                   # full automated deployment"
+              echo "  ./k3s_image_push.sh           # push image to K3s nodes"
+              echo "  ./tailscale-setup.sh          # setup Tailscale proxy (optional)"
+              echo "  ./status.sh                   # check deployment status"
+              echo ""
+              echo "Troubleshooting:"
+              echo "  kubectl get all -n default    # view all resources"
+              echo "  kubectl logs -l app=eov-flask # view Flask app logs"
             '';
 
             FLASK_APP = "app.py";
