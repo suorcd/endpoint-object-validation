@@ -1,0 +1,68 @@
+# 1. ConfigMap is no longer needed for code, 
+# but we might keep one for configuration if needed later.
+# (Removed to simplify, as code is now in the Docker image)
+
+# 2. Flask Server (Deployment)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eov-flask
+  labels:
+    app: flask-rr
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flask-rr
+  template:
+    metadata:
+      labels:
+        app: flask-rr
+    spec:
+      containers:
+      - name: flask-rr
+        # Using image from registry
+        image: gitea.ser.ink/ser/eov-flask:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        
+        # Resources prevent one pod from crashing the node
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+        # Liveness: Restart pod if it deadlocks
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        # Readiness: Don't send traffic until ready
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 2
+          periodSeconds: 5
+
+---
+# 3. Service to expose Flask app
+apiVersion: v1
+kind: Service
+metadata:
+  name: eov-flask-service
+spec:
+  type: ClusterIP
+  selector:
+    app: flask-rr
+  ports:
+  - name: http
+    port: 80
+    targetPort: 5000
