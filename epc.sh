@@ -25,10 +25,16 @@ if [[ -z "${URL}" ]]; then
     exit 1
 fi
 
-# Compute hash of the file if --file is provided
+# Compute hash safely without eval
 if [[ -n "${FILE}" ]]; then
     if [[ -f "${FILE}" ]]; then
-        HASH=$(eval "${HASH_ALG}sum ${FILE}" | awk '{print $1}')
+        # SECURITY FIX: Replaced eval with direct command execution
+        if command -v "${HASH_ALG}sum" >/dev/null 2>&1; then
+            HASH=$("${HASH_ALG}sum" "${FILE}" | awk '{print $1}')
+        else
+             echo "Error: Hash algorithm '${HASH_ALG}' not found (command '${HASH_ALG}sum' missing)."
+             exit 1
+        fi
     else
         echo "File ${FILE} does not exist."
         exit 1
@@ -71,14 +77,16 @@ NC='\033[0m' # No Color
 
 # Iterate over each IP address
 for IP in ${IPS}; do
-  mkdir "${IP}"
+  mkdir -p "${IP}"
   if [[ "${DEBUG}" == true ]]; then
       pushd "./${IP}" || exit
   else
       pushd "./${IP}" > /dev/null || exit
   fi
-  curl --silent --resolve "${HOSTNAME}:${PROTOCOL}:${IP}" -O "${URL}"
   
+  # Curl with resolve to force IP
+  curl --silent --resolve "${HOSTNAME}:${PROTOCOL}:${IP}" -O "${URL}"
+
   # Debug output
   if [[ "${DEBUG}" == true ]]; then
       echo "Downloaded content from ${URL} to ${IP} directory"
@@ -86,7 +94,8 @@ for IP in ${IPS}; do
 
   # Compute hash and compare with provided hash if HASH is provided
   if [[ -n "${HASH}" ]]; then
-      COMPUTED_HASH=$(find . -type f -exec ${HASH_ALG}sum {} \; | awk '{print $1}')
+      # Use find -exec safely
+      COMPUTED_HASH=$(find . -maxdepth 1 -type f -exec "${HASH_ALG}sum" {} \; | awk '{print $1}')
       if [[ "${COMPUTED_HASH}" == "${HASH}" ]]; then
           echo "Hash matches || ${IP}"
       else
