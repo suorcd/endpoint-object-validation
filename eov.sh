@@ -7,6 +7,7 @@ FILE=""
 HASH_ALG="md5"
 PROTOCOL=80
 DEBUG=false
+CLEANUP=false
 
 # Parse command-line arguments
 while [[ "$#" -gt 0 ]]; do
@@ -15,13 +16,20 @@ while [[ "$#" -gt 0 ]]; do
         --file) FILE="$2"; shift ;;
         --hash-alg) HASH_ALG="$2"; shift ;;
         --debug) DEBUG=true ;;
+        --cleanup) CLEANUP=true ;;
+        --clean-all) 
+            echo "Cleaning up all EOV temporary files in /tmp/eov..."
+            rm -rf /tmp/eov
+            echo "Done."
+            exit 0 
+            ;;
         *) URL="$1" ;;
     esac
     shift
 done
 
 if [[ -z "${URL}" ]]; then
-    echo "Usage: $0 <URL> [--hash HASH] [--file FILE] [--hash-alg HASH_ALG] [--debug]"
+    echo "Usage: $0 <URL> [--hash HASH] [--file FILE] [--hash-alg HASH_ALG] [--cleanup] [--clean-all] [--debug]"
     exit 1
 fi
 
@@ -116,4 +124,12 @@ if [[ "${DEBUG}" == true ]]; then
     popd || exit
 else
     popd > /dev/null || exit
+fi
+
+# Cleanup logic
+if [[ "${CLEANUP}" == true ]]; then
+    if [[ "${DEBUG}" == true ]]; then
+        echo "Cleaning up workdir: ${WORKDIR}"
+    fi
+    rm -rf "${WORKDIR}"
 fi
