@@ -259,7 +259,7 @@ def view_eov():
                 </details>
                 
                 <details id="full-results-drawer" class="options-drawer" style="display: none;">
-                    <summary>Full Results (JSON)</summary>
+                    <summary id="full-results-title">Full Results (JSON)</summary>
                     <div class="options-content">
                         <textarea id="output" readonly></textarea>
                     </div>
@@ -279,6 +279,7 @@ def view_eov():
                 const submitBtn = document.getElementById('submit');
                 const summary = document.getElementById('summary');
                 const fullResultsDrawer = document.getElementById('full-results-drawer');
+                const fullResultsTitle = document.getElementById('full-results-title');
                 const output = document.getElementById('output');
                 const hashInput = document.getElementById('hash');
                 const hashAlgSelect = document.getElementById('hash-alg');
@@ -380,15 +381,18 @@ def view_eov():
                                 
                                 // Populate full results
                                 output.value = JSON.stringify(data, null, 2);
+                                fullResultsTitle.textContent = 'Full Results (JSON)';
                                 fullResultsDrawer.style.display = 'block';
                             }} catch (parseErr) {{
                                 summary.innerHTML = `<p class="result-status error">Error parsing response</p>`;
                                 output.value = text;
+                                fullResultsTitle.textContent = 'Full Results (JSON)';
                                 fullResultsDrawer.style.display = 'block';
                             }}
                         }} else {{
                             summary.innerHTML = `<p class="result-detail" style="text-align: center;">Response received (${{formatSelect.value.toUpperCase()}})</p>`;
                             output.value = text;
+                            fullResultsTitle.textContent = `Full Results (${{formatSelect.value.toUpperCase()}})`;
                             fullResultsDrawer.style.display = 'block';
                         }}
                     }} catch (err) {{
