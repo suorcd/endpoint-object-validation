@@ -1,5 +1,5 @@
 {
-  description = "A flake for the epc.sh script";
+  description = "A flake for the epc.php script";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
@@ -12,24 +12,23 @@
     {
       default = pkgs.stdenv.mkDerivation {
         name = "epc";
-        src = ./.;
+        src = self;
 
         buildInputs = [
-          pkgs.bash
-          pkgs.curl
-          pkgs.drill
-          pkgs.coreutils
+          pkgs.php
+          pkgs.phpExtensions.curl
+          pkgs.makeWrapper
         ];
 
         installPhase = ''
           mkdir -p $out/bin
-          cp ${./epc.sh} $out/bin/epc.sh
-          chmod +x $out/bin/epc.sh
+          cp ${self}/epc.php $out/bin/epc.php
+          makeWrapper ${pkgs.php}/bin/php $out/bin/start-server --add-flags "-S 0.0.0.0:8000 -t $out/bin"
         '';
 
         meta = with pkgs.lib; {
-          description = "A script to check the availability of a URL and compare hash values";
-          license = licenses.gpl3;
+          description = "A PHP script to check the availability of a URL and compare hash values";
+          license = licenses.mit;
           maintainers = with maintainers; [ suorcd ];
         };
       };
