@@ -13,6 +13,7 @@ import socket
 import yaml
 import csv
 import io
+import concurrent.futures
 
 # Disable SSL warnings when using verify=False
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -21,6 +22,23 @@ app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 # Base64 encoded ASCII art
 encoded_ascii = "Li0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0uCnwgTmV2ZXIgZ29ubmEgZ2l2ZSB5b3UgdXAgICAgICAgICAgfAp8IE5ldmVyIGdvbm5hIGxldCB5b3UgZG93biAgICAgICAgIHwKfCBOZXZlciBnb25uYSBydW4gYXJvdW5kIGFuZCBkZXNlcnR8CnwgeW91ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfAonLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLScKICAgICAgICAgICAgLj0oKCg9LiAgICAgICAKICAgICAgICAgIGk7JyAgIGA6aSAgICAgIAogICAgICAgICAgIV9fICAgX18hICAgICAgCiAgICAgICAgICh+KF8pLShfKX4pICAgICAKICAgICAgICAgIHwgICBuICAgwqEgICAgICAKICAgICAgICAgIFwgIC0gIC8gICAgICAgCiAgICAgICAgICAhYC0tLSchICAgICAgIAogICAgICAgICAgL2AtLl8uLSdcICAgICAgCiAgICBfLi1+J1xfLyB8b1xfL2B+LS5fIAogICAgJyAgICAgICAgfG8gICAgICAgIGAKICAgIFwuICAgICAgX3xfICAgICAgLi8gCiAgICAgIGAtLiAgICAgICAgICAuLScgICAKICAgIGB+LS0tLS0tficK"
+
+class SniAdapter(HTTPAdapter):
+    """
+    Adapter to force a specific server_hostname (SNI) 
+    while connecting to a direct IP address in the URL.
+    """
+    def __init__(self, sni_hostname, **kwargs):
+        self.sni_hostname = sni_hostname
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        # Inject the SNI hostname into the SSL context of the pool
+        pool_kwargs['server_hostname'] = self.sni_hostname
+        # Note: assert_hostname is usually for verifying the cert matches the hostname.
+        # Since we use verify=False often in this tool, this ensures the handshake uses the right name.
+        pool_kwargs['assert_hostname'] = self.sni_hostname
+        super().init_poolmanager(connections, maxsize, block, **pool_kwargs)
 
 @app.route("/favicon.ico")
 def favicon():
@@ -56,6 +74,69 @@ def r2():
     """
     return Response(html, mimetype="text/html")
 
+def check_single_ip(ip, url, hostname, scheme, timeout, hash_func, hash_alg, expected_hash):
+    """
+    Helper function to check a single IP. 
+    Designed to be run in a thread.
+    """
+    result = {
+        'ip': ip,
+        'status_code': None,
+        'hash': None,
+        'hash_alg': hash_alg,
+        'file_size_bytes': None
+    }
+    
+    try:
+        session = requests.Session()
+        
+        if scheme == 'https':
+            # Use the SniAdapter to connect to the IP but send the correct Hostname in SNI
+            # Mount it to the specific IP URL structure
+            prefix = f"https://{ip}"
+            adapter = SniAdapter(sni_hostname=hostname)
+            session.mount(prefix, adapter)
+            
+            # Construct URL using IP but keeping path/query
+            # We replace hostname with IP in the URL
+            target_url = url.replace(hostname, ip, 1)
+            
+            # Host header is still good practice even with SNI
+            response = session.get(
+                target_url, 
+                headers={'Host': hostname}, 
+                timeout=timeout, 
+                allow_redirects=True, 
+                verify=False
+            )
+        else:
+            # For HTTP, simple replacement works fine
+            target_url = url.replace(hostname, ip, 1)
+            response = session.get(
+                target_url,
+                headers={'Host': hostname},
+                timeout=timeout,
+                allow_redirects=True
+            )
+        
+        # Get content and compute hash
+        content = response.content
+        content_hash = hash_func(content).hexdigest()
+        file_size = len(content)
+        
+        result['status_code'] = response.status_code
+        result['hash'] = content_hash
+        result['file_size_bytes'] = file_size
+        
+        # Compare with expected hash if provided
+        if expected_hash:
+            result['hash_matches'] = (content_hash == expected_hash)
+            
+    except Exception as e:
+        result['error'] = str(e)
+        
+    return result
+
 @app.route("/v1/eov")
 def v1_eov():
     """
@@ -67,8 +148,7 @@ def v1_eov():
     timeout = int(request.args.get('timeout', 33))
     format = request.args.get('format', 'json').lower()
     
-    # Simple Security Guardrail: Prevent scanning localhost or metadata services
-    # (Note: A robust production app needs a more comprehensive blocklist)
+    # Simple Security Guardrail
     forbidden_hosts = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254']
     
     # Record start time
@@ -84,7 +164,8 @@ def v1_eov():
     # Parse URL
     parsed = urlparse(url)
     hostname = parsed.hostname
-    protocol = 443 if parsed.scheme == 'https' else 80
+    scheme = parsed.scheme
+    protocol = 443 if scheme == 'https' else 80
     
     if not hostname or hostname in forbidden_hosts:
         return jsonify({'error': 'Invalid or forbidden hostname'}), 400
@@ -109,62 +190,25 @@ def v1_eov():
     
     results = []
     
-    # Check each IP
-    for ip in ips:
-        try:
-            # Create a session with custom DNS resolution
-            session = requests.Session()
-            
-            # For HTTPS, we need to connect to IP but use hostname for SNI
-            if parsed.scheme == 'https':
-                session.mount('https://', HTTPAdapter())
-                
-                # Monkey patch for this specific request
-                # NOTE: This is a hacky way to force DNS resolution for SNI requests
-                original_getaddrinfo = socket.getaddrinfo
-                def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-                    if host == hostname:
-                        # Return our specific IP
-                        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (ip, port))]
-                    return original_getaddrinfo(host, port, family, type, proto, flags)
-                
-                socket.getaddrinfo = patched_getaddrinfo
-                try:
-                    response = session.get(url, timeout=timeout, allow_redirects=True, verify=False)
-                finally:
-                    socket.getaddrinfo = original_getaddrinfo
-            else:
-                # For HTTP, simple replacement works fine
-                ip_url = url.replace(hostname, ip)
-                response = session.get(
-                    ip_url,
-                    headers={'Host': hostname},
-                    timeout=timeout,
-                    allow_redirects=True
-                )
-            
-            # Compute hash of content
-            content_hash = hash_func(response.content).hexdigest()
-            
-            result = {
-                'ip': ip,
-                'status_code': response.status_code,
-                'hash': content_hash,
-                'hash_alg': hash_alg
-            }
-            
-            # Compare with expected hash if provided
-            if expected_hash:
-                result['hash_matches'] = (content_hash == expected_hash)
-            
-            results.append(result)
-            
-        except Exception as e:
-            results.append({
-                'ip': ip,
-                'error': str(e)
-            })
+    # Use ThreadPoolExecutor for parallel execution
+    # Limit max_workers to avoid exhausting system resources
+    max_workers = min(len(ips), 20)
     
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_ip = {
+            executor.submit(
+                check_single_ip, 
+                ip, url, hostname, scheme, timeout, hash_func, hash_alg, expected_hash
+            ): ip for ip in ips
+        }
+        
+        # Collect results as they complete
+        for future in concurrent.futures.as_completed(future_to_ip):
+            results.append(future.result())
+    
+    # Sort results by IP for consistency
+    results.sort(key=lambda x: x['ip'])
+
     # Calculate total time
     end_time = time.time()
     total_time = round(end_time - start_time, 3)
@@ -209,6 +253,26 @@ def view_eov():
             <title>View EOV</title>
             <link rel="shortcut icon" href="{favicon_url}">
             <link rel="stylesheet" href="{style_url}">
+            <style>
+                /* Add a simple spinner */
+                .spinner {{
+                    display: inline-block;
+                    width: 20px;
+                    height: 20px;
+                    border: 3px solid rgba(255,255,255,.3);
+                    border-radius: 50%;
+                    border-top-color: #fff;
+                    animation: spin 1s ease-in-out infinite;
+                    margin-right: 8px;
+                    vertical-align: middle;
+                }}
+                @keyframes spin {{
+                    to {{ transform: rotate(360deg); }}
+                }}
+                .hidden {{
+                    display: none;
+                }}
+            </style>
         </head>
         <body>
             <div class="panel">
@@ -279,12 +343,152 @@ def view_eov():
                 const submitBtn = document.getElementById('submit');
                 const summary = document.getElementById('summary');
                 const fullResultsDrawer = document.getElementById('full-results-drawer');
+                const fullResultsSummary = fullResultsDrawer.querySelector('summary'); 
                 const output = document.getElementById('output');
                 const hashInput = document.getElementById('hash');
                 const hashAlgSelect = document.getElementById('hash-alg');
                 const timeoutInput = document.getElementById('timeout');
                 const formatSelect = document.getElementById('format');
                 const curlCommand = document.getElementById('curl-command');
+
+                function parseCSV(text) {{
+                    const lines = text.trim().split(/\\r?\\n/);
+                    if (lines.length < 2) return [];
+                    const headers = lines[0].split(',');
+                    const hashIdx = headers.indexOf('hash');
+                    const ipIdx = headers.indexOf('ip');
+                    const errIdx = headers.indexOf('error');
+                    const statusIdx = headers.indexOf('status_code');
+                    
+                    return lines.slice(1).map(line => {{
+                        const vals = line.split(',');
+                        const obj = {{}};
+                        if (hashIdx > -1) obj.hash = vals[hashIdx];
+                        if (ipIdx > -1) obj.ip = vals[ipIdx];
+                        if (errIdx > -1) obj.error = vals[errIdx];
+                        if (statusIdx > -1) obj.status_code = parseInt(vals[statusIdx]);
+                        return obj;
+                    }});
+                }}
+
+                function parseYAML(text) {{
+                    const parts = text.split('results:');
+                    if (parts.length < 2) return [];
+                    const resultsBlock = parts[1];
+                    
+                    const items = [];
+                    let currentItem = {{}};
+                    
+                    const lines = resultsBlock.split('\\n');
+                    for (let line of lines) {{
+                        line = line.trim();
+                        if (!line) continue;
+                        
+                        if (line.startsWith('- ')) {{
+                            if (Object.keys(currentItem).length > 0) {{
+                                items.push(currentItem);
+                            }}
+                            currentItem = {{}};
+                            line = line.substring(2);
+                        }}
+                        
+                        const colonIdx = line.indexOf(':');
+                        if (colonIdx > -1) {{
+                            const k = line.substring(0, colonIdx).trim();
+                            const v = line.substring(colonIdx + 1).trim();
+                            currentItem[k] = v;
+                        }}
+                    }}
+                    if (Object.keys(currentItem).length > 0) items.push(currentItem);
+                    return items;
+                }}
+
+                function performAnalysis(results, hostname, totalTime, expectedHash) {{
+                    let hashValidation = null;
+                    if (results && results.length > 0) {{
+                        const hashes = results
+                            .filter(r => r.hash)
+                            .map(r => r.hash);
+                        
+                        if (hashes.length > 0) {{
+                            const allMatch = hashes.every(h => h === hashes[0]);
+                            const uniqueHashes = [...new Set(hashes)];
+                            
+                            hashValidation = {{
+                                total_ips: results.length,
+                                unique_hashes: uniqueHashes.length,
+                                all_match: allMatch
+                            }};
+                            
+                            if (!allMatch) {{
+                                hashValidation.mismatches = uniqueHashes.map(hash => ({{
+                                    hash: hash,
+                                    ips: results
+                                        .filter(r => r.hash === hash)
+                                        .map(r => r.ip)
+                                }}));
+                            }}
+                        }}
+                    }}
+                    
+                    let summaryHTML = '<div class="result-summary">';
+                    if (hostname) summaryHTML += `<h3>${{hostname}}</h3>`;
+                    
+                    if (results.length > 0) {{
+                         const timeStr = totalTime ? ` in ${{totalTime}}s` : '';
+                         summaryHTML += `<p class="result-detail">Checked ${{results.length}} IP${{results.length !== 1 ? 's' : ''}}${{timeStr}}</p>`;
+                         
+                         if (hashValidation) {{
+                            if (expectedHash) {{
+                                const normExpected = expectedHash.toLowerCase().trim();
+                                const normHashes = results.filter(r => r.hash).map(r => r.hash.toLowerCase());
+                                const allMatchExpected = normHashes.every(h => h === normExpected);
+                                
+                                if (allMatchExpected) {{
+                                    summaryHTML += '<p class="result-status success">✓ All hashes match expected value</p>';
+                                }} else {{
+                                    const allConsistent = normHashes.every(h => h === normHashes[0]);
+                                    if (allConsistent) {{
+                                         summaryHTML += '<p class="result-status error">✗ Hash does not match expected value</p>';
+                                         summaryHTML += `<p class="result-detail">Expected: ${{expectedHash.substring(0, 16)}}...<br>Actual: ${{results[0].hash.substring(0, 16)}}...</p>`;
+                                    }} else {{
+                                         summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                         const matchCount = normHashes.filter(h => h === normExpected).length;
+                                         if (matchCount > 0) {{
+                                            summaryHTML += `<p class="result-detail">${{matchCount}} IP(s) match expectation<br>${{results.length - matchCount}} IP(s) mismatch</p>`;
+                                         }} else {{
+                                            summaryHTML += `<p class="result-detail">No IPs match expected hash</p>`;
+                                         }}
+                                    }}
+                                }}
+                            }} else {{
+                                if (hashValidation.all_match) {{
+                                    summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
+                                }} else {{
+                                    summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                    summaryHTML += `<p class="result-detail">${{hashValidation.unique_hashes}} unique hash${{hashValidation.unique_hashes !== 1 ? 'es' : ''}} found</p>`;
+                                }}
+                            }}
+                        }} else {{
+                            const successCount = results.filter(r => r.status_code == 200 || r.status_code == 301 || r.status_code == 302).length;
+                            const errorCount = results.filter(r => r.error).length;
+                            
+                            if (errorCount === 0 && successCount > 0) {{
+                                summaryHTML += '<p class="result-status success">✓ All requests successful</p>';
+                            }} else if (errorCount > 0) {{
+                                summaryHTML += `<p class="result-status error">✗ ${{errorCount}} error${{errorCount !== 1 ? 's' : ''}}</p>`;
+                            }} else {{
+                                summaryHTML += '<p class="result-detail">No content hashes found</p>';
+                            }}
+                        }}
+                    }} else {{
+                        summaryHTML += '<p class="result-status success">✓ Request successful</p>';
+                        summaryHTML += '<p class="result-detail">(Content analysis available via JSON/YAML parsing)</p>';
+                    }}
+                    
+                    summaryHTML += '</div>';
+                    return summaryHTML;
+                }}
 
                 form.addEventListener('submit', async (event) => {{
                     event.preventDefault();
@@ -295,7 +499,10 @@ def view_eov():
                     }}
 
                     submitBtn.disabled = true;
-                    summary.innerHTML = '<p style="text-align: center; color: var(--muted);">Running /v1/eov...</p>';
+                    // Add spinner logic
+                    const originalBtnText = submitBtn.innerHTML;
+                    submitBtn.innerHTML = '<span class="spinner"></span>Running...';
+                    summary.innerHTML = '<p style="text-align: center; color: var(--muted);">Resolving IPs and fetching content...</p>';
                     fullResultsDrawer.style.display = 'none';
 
                     try {{
@@ -312,89 +519,54 @@ def view_eov():
                         }}
 
                         const apiUrl = window.location.origin + '/v1/eov?' + params.toString();
-                        
-                        // Generate curl command
                         curlCommand.value = `curl '${{apiUrl}}'`;
                         
                         const resp = await fetch('/v1/eov?' + params.toString());
                         const text = await resp.text();
                         
-                        if (formatSelect.value === 'json') {{
-                            try {{
-                                const data = JSON.parse(text);
-                                
-                                // Check if all hashes match
-                                let hashValidation = null;
-                                if (data.results && data.results.length > 0) {{
-                                    const hashes = data.results
-                                        .filter(r => r.hash)
-                                        .map(r => r.hash);
-                                    
-                                    if (hashes.length > 0) {{
-                                        const allMatch = hashes.every(h => h === hashes[0]);
-                                        const uniqueHashes = [...new Set(hashes)];
-                                        
-                                        hashValidation = {{
-                                            total_ips: data.results.length,
-                                            unique_hashes: uniqueHashes.length,
-                                            all_match: allMatch
-                                        }};
-                                        
-                                        if (!allMatch) {{
-                                            hashValidation.mismatches = uniqueHashes.map(hash => ({{
-                                                hash: hash,
-                                                ips: data.results
-                                                    .filter(r => r.hash === hash)
-                                                    .map(r => r.ip)
-                                            }}));
-                                        }}
-                                        
-                                        data.hash_validation = hashValidation;
-                                    }}
-                                }}
-                                
-                                // Generate summary HTML
-                                let summaryHTML = '<div class="result-summary">';
-                                summaryHTML += `<h3>${{data.hostname}}</h3>`;
-                                summaryHTML += `<p class="result-detail">Checked ${{data.results.length}} IP${{data.results.length !== 1 ? 's' : ''}} in ${{data.total_time_seconds}}s</p>`;
-                                
-                                if (hashValidation) {{
-                                    if (hashValidation.all_match) {{
-                                        summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
-                                    }} else {{
-                                        summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
-                                        summaryHTML += `<p class="result-detail">${{hashValidation.unique_hashes}} unique hash${{hashValidation.unique_hashes !== 1 ? 'es' : ''}} found</p>`;
-                                    }}
-                                }} else {{
-                                    const successCount = data.results.filter(r => r.status_code === 200 || r.status_code === 301 || r.status_code === 302).length;
-                                    const errorCount = data.results.filter(r => r.error).length;
-                                    if (errorCount === 0 && successCount > 0) {{
-                                        summaryHTML += '<p class="result-status success">✓ All requests successful</p>';
-                                    }} else if (errorCount > 0) {{
-                                        summaryHTML += `<p class="result-status error">✗ ${{errorCount}} error${{errorCount !== 1 ? 's' : ''}}</p>`;
-                                    }}
-                                }}
-                                
-                                summaryHTML += '</div>';
-                                summary.innerHTML = summaryHTML;
-                                
-                                // Populate full results
-                                output.value = JSON.stringify(data, null, 2);
-                                fullResultsDrawer.style.display = 'block';
-                            }} catch (parseErr) {{
-                                summary.innerHTML = `<p class="result-status error">Error parsing response</p>`;
-                                output.value = text;
-                                fullResultsDrawer.style.display = 'block';
-                            }}
-                        }} else {{
-                            summary.innerHTML = `<p class="result-detail" style="text-align: center;">Response received (${{formatSelect.value.toUpperCase()}})</p>`;
-                            output.value = text;
-                            fullResultsDrawer.style.display = 'block';
+                        fullResultsSummary.textContent = `Full Results (${{formatSelect.value.toUpperCase()}})`;
+                        output.value = text;
+                        fullResultsDrawer.style.display = 'block';
+
+                        if (!resp.ok) {{
+                             summary.innerHTML = `<p class="result-status error">Request failed (${{resp.status}})</p>`;
+                             return;
                         }}
+
+                        let results = [];
+                        let hostname = new URL(targetUrl).hostname;
+                        let totalTime = null;
+
+                        try {{
+                            if (formatSelect.value === 'json') {{
+                                const data = JSON.parse(text);
+                                results = data.results || [];
+                                hostname = data.hostname;
+                                totalTime = data.total_time_seconds;
+                                output.value = JSON.stringify(data, null, 2);
+                            }} else if (formatSelect.value === 'csv') {{
+                                results = parseCSV(text);
+                            }} else if (formatSelect.value === 'yaml') {{
+                                results = parseYAML(text);
+                            }}
+                            
+                            summary.innerHTML = performAnalysis(results, hostname, totalTime, hashValue);
+
+                        }} catch (parseErr) {{
+                            console.error(parseErr);
+                            summary.innerHTML = `
+                                <div class="result-summary">
+                                    <h3>${{hostname}}</h3>
+                                    <p class="result-status success">✓ Request successful</p>
+                                    <p class="result-detail" style="font-size: 0.8em">Analysis failed (Parse Error)</p>
+                                </div>`;
+                        }}
+
                     }} catch (err) {{
                         summary.innerHTML = `<p class="result-status error">Request failed: ${{err}}</p>`;
                     }} finally {{
                         submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
                     }}
                 }});
 
