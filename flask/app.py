@@ -250,7 +250,15 @@ def view_eov():
                         </div>
                     </details>
                 </form>
-                <textarea id="output" readonly placeholder="Results will appear here..."></textarea>
+                
+                <div id="summary" class="summary-output"></div>
+                
+                <details id="full-results-drawer" class="options-drawer" style="display: none;">
+                    <summary>Full Results (JSON)</summary>
+                    <div class="options-content">
+                        <textarea id="output" readonly></textarea>
+                    </div>
+                </details>
                 
                 <details class="options-drawer">
                     <summary>Curl Command</summary>
@@ -264,6 +272,8 @@ def view_eov():
                 const form = document.getElementById('eov-form');
                 const urlInput = document.getElementById('url');
                 const submitBtn = document.getElementById('submit');
+                const summary = document.getElementById('summary');
+                const fullResultsDrawer = document.getElementById('full-results-drawer');
                 const output = document.getElementById('output');
                 const hashInput = document.getElementById('hash');
                 const hashAlgSelect = document.getElementById('hash-alg');
@@ -275,12 +285,13 @@ def view_eov():
                     event.preventDefault();
                     const targetUrl = urlInput.value.trim();
                     if (!targetUrl) {{
-                        output.value = 'Please provide a URL.';
+                        summary.innerHTML = '<p style="text-align: center; color: var(--accent);">Please provide a URL.</p>';
                         return;
                     }}
 
                     submitBtn.disabled = true;
-                    output.value = 'Running /v1/eov...';
+                    summary.innerHTML = '<p style="text-align: center; color: var(--muted);">Running /v1/eov...</p>';
+                    fullResultsDrawer.style.display = 'none';
 
                     try {{
                         const params = new URLSearchParams({{
@@ -308,6 +319,7 @@ def view_eov():
                                 const data = JSON.parse(text);
                                 
                                 // Check if all hashes match
+                                let hashValidation = null;
                                 if (data.results && data.results.length > 0) {{
                                     const hashes = data.results
                                         .filter(r => r.hash)
@@ -317,32 +329,65 @@ def view_eov():
                                         const allMatch = hashes.every(h => h === hashes[0]);
                                         const uniqueHashes = [...new Set(hashes)];
                                         
-                                        data.hash_validation = {{
+                                        hashValidation = {{
                                             total_ips: data.results.length,
                                             unique_hashes: uniqueHashes.length,
                                             all_match: allMatch
                                         }};
                                         
                                         if (!allMatch) {{
-                                            data.hash_validation.mismatches = uniqueHashes.map(hash => ({{
+                                            hashValidation.mismatches = uniqueHashes.map(hash => ({{
                                                 hash: hash,
                                                 ips: data.results
                                                     .filter(r => r.hash === hash)
                                                     .map(r => r.ip)
                                             }}));
                                         }}
+                                        
+                                        data.hash_validation = hashValidation;
                                     }}
                                 }}
                                 
+                                // Generate summary HTML
+                                let summaryHTML = '<div class="result-summary">';
+                                summaryHTML += `<h3>${{data.hostname}}</h3>`;
+                                summaryHTML += `<p class="result-detail">Checked ${{data.results.length}} IP${{data.results.length !== 1 ? 's' : ''}} in ${{data.total_time_seconds}}s</p>`;
+                                
+                                if (hashValidation) {{
+                                    if (hashValidation.all_match) {{
+                                        summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
+                                    }} else {{
+                                        summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                        summaryHTML += `<p class="result-detail">${{hashValidation.unique_hashes}} unique hash${{hashValidation.unique_hashes !== 1 ? 'es' : ''}} found</p>`;
+                                    }}
+                                }} else {{
+                                    const successCount = data.results.filter(r => r.status_code === 200 || r.status_code === 301 || r.status_code === 302).length;
+                                    const errorCount = data.results.filter(r => r.error).length;
+                                    if (errorCount === 0 && successCount > 0) {{
+                                        summaryHTML += '<p class="result-status success">✓ All requests successful</p>';
+                                    }} else if (errorCount > 0) {{
+                                        summaryHTML += `<p class="result-status error">✗ ${{errorCount}} error${{errorCount !== 1 ? 's' : ''}}</p>`;
+                                    }}
+                                }}
+                                
+                                summaryHTML += '</div>';
+                                summary.innerHTML = summaryHTML;
+                                
+                                // Populate full results
                                 output.value = JSON.stringify(data, null, 2);
+                                fullResultsDrawer.style.display = 'block';
                             }} catch (parseErr) {{
+                                summary.innerHTML = `<p class="result-status error">Error parsing response</p>`;
                                 output.value = text;
+                                fullResultsDrawer.style.display = 'block';
                             }}
                         }} else {{
+                            summary.innerHTML = `<p class="result-detail" style="text-align: center;">Response received (${{formatSelect.value.toUpperCase()}})</p>`;
                             output.value = text;
+                            fullResultsDrawer.style.display = 'block';
                         }}
                     }} catch (err) {{
-                        output.value = `Request failed: ${{err}}`;
+                        summary.innerHTML = `<p class="result-status error">Request failed: ${{err}}</p>`;
                     }} finally {{
                         submitBtn.disabled = false;
                     }}
