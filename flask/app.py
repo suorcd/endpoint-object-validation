@@ -361,7 +361,25 @@ def view_eov():
                                 summaryHTML += `<h3>${{data.hostname}}</h3>`;
                                 summaryHTML += `<p class="result-detail">Checked ${{data.results.length}} IP${{data.results.length !== 1 ? 's' : ''}} in ${{data.total_time_seconds}}s</p>`;
                                 
+                                // Check if expected hash matches
+                                const expectedHash = hashInput.value.trim();
+                                let expectedHashMatches = null;
+                                if (expectedHash && hashValidation) {{
+                                    const hashes = data.results
+                                        .filter(r => r.hash)
+                                        .map(r => r.hash);
+                                    expectedHashMatches = hashes.some(h => h.toLowerCase() === expectedHash.toLowerCase());
+                                }}
+                                
                                 if (hashValidation) {{
+                                    if (expectedHashMatches !== null) {{
+                                        if (expectedHashMatches) {{
+                                            summaryHTML += '<p class="result-status success">✓ Expected hash found</p>';
+                                        }} else {{
+                                            summaryHTML += '<p class="result-status error">✗ Expected hash NOT found</p>';
+                                        }}
+                                    }}
+                                    
                                     if (hashValidation.all_match) {{
                                         summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
                                     }} else {{
@@ -424,7 +442,25 @@ def view_eov():
                                 summaryHTML += `<h3>${{jsonData.hostname}}</h3>`;
                                 summaryHTML += `<p class="result-detail">Checked ${{jsonData.results.length}} IP${{jsonData.results.length !== 1 ? 's' : ''}} in ${{jsonData.total_time_seconds}}s</p>`;
                                 
+                                // Check if expected hash matches
+                                const expectedHash = hashInput.value.trim();
+                                let expectedHashMatches = null;
+                                if (expectedHash && hashValidation) {{
+                                    const hashes = jsonData.results
+                                        .filter(r => r.hash)
+                                        .map(r => r.hash);
+                                    expectedHashMatches = hashes.some(h => h.toLowerCase() === expectedHash.toLowerCase());
+                                }}
+                                
                                 if (hashValidation) {{
+                                    if (expectedHashMatches !== null) {{
+                                        if (expectedHashMatches) {{
+                                            summaryHTML += '<p class="result-status success">✓ Expected hash found</p>';
+                                        }} else {{
+                                            summaryHTML += '<p class="result-status error">✗ Expected hash NOT found</p>';
+                                        }}
+                                    }}
+                                    
                                     if (hashValidation.all_match) {{
                                         summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
                                     }} else {{
