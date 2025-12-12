@@ -195,70 +195,72 @@ def v1_eov():
 
 @app.route("/")
 def view_eov():
-        favicon_url = url_for('static', filename='favicon.ico', _scheme=request.scheme, _external=True)
-        html_template = """<!DOCTYPE html>
-        <html>
-            <head>
-                <title>View EOV</title>
-                <link rel=\"shortcut icon\" href=\"{FAVICON_URL}\">
-                <style>
-                    body {{ font-family: monospace; background: #0d1117; color: #c9d1d9; margin: 0; padding: 24px; }}
-                    .panel {{ max-width: 720px; margin: 0 auto; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }}
-                    label {{ display: block; margin-bottom: 8px; font-weight: bold; }}
-                    input[type=text] {{ width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; }}
-                    button {{ margin-top: 12px; padding: 10px 14px; border: none; border-radius: 6px; background: #238636; color: #fff; cursor: pointer; font-weight: bold; }}
-                    button:disabled {{ opacity: 0.6; cursor: not-allowed; }}
-                    textarea {{ width: 100%; height: 320px; margin-top: 16px; padding: 10px; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-family: monospace; resize: vertical; }}
-                </style>
-            </head>
-            <body>
-                <div class=\"panel\">
-                    <h2>EOV Viewer</h2>
-                    <form id=\"eov-form\">
-                        <label for=\"url\">Target URL</label>
-                        <input id=\"url\" name=\"url\" type=\"text\" placeholder=\"https://example.com\" required>
-                        <button id=\"submit\" type=\"submit\">Run /v1/eov</button>
-                    </form>
-                    <textarea id=\"output\" readonly placeholder=\"Results will appear here...\"></textarea>
-                </div>
-                <script>
-                    const form = document.getElementById('eov-form');
-                    const urlInput = document.getElementById('url');
-                    const submitBtn = document.getElementById('submit');
-                    const output = document.getElementById('output');
+    favicon_url = url_for('static', filename='favicon.ico', _scheme=request.scheme, _external=True)
+    style_url = url_for('static', filename='style.css', _scheme=request.scheme, _external=True)
+    html = f"""<!DOCTYPE html>
+    <html>
+        <head>
+            <title>View EOV</title>
+            <link rel="shortcut icon" href="{favicon_url}">
+            <link rel="stylesheet" href="{style_url}">
+        </head>
+        <body>
+            <div class="panel">
+                <h2>EOV Viewer</h2>
+                <form id="eov-form">
+                    <label for="url">Target URL</label>
+                    <input id="url" name="url" type="text" placeholder="https://example.com" required>
+                    <button id="submit" type="submit">Run /v1/eov</button>
+                </form>
+                <textarea id="output" readonly placeholder="Results will appear here..."></textarea>
+            </div>
+            <div style="position: fixed; bottom: 10px; right: 10px; font-size: 12px;">
+                <a id="pi-link" href="/r2.html" title="Dale: Click it and then press Ctrl+Shift">π</a>
+            </div>
+            <script>
+                const form = document.getElementById('eov-form');
+                const urlInput = document.getElementById('url');
+                const submitBtn = document.getElementById('submit');
+                const output = document.getElementById('output');
 
-                    form.addEventListener('submit', async (event) => {
-                        event.preventDefault();
-                        const targetUrl = urlInput.value.trim();
-                        if (!targetUrl) {
-                            output.value = 'Please provide a URL.';
-                            return;
-                        }
+                form.addEventListener('submit', async (event) => {{
+                    event.preventDefault();
+                    const targetUrl = urlInput.value.trim();
+                    if (!targetUrl) {{
+                        output.value = 'Please provide a URL.';
+                        return;
+                    }}
 
-                        submitBtn.disabled = true;
-                        output.value = 'Running /v1/eov...';
+                    submitBtn.disabled = true;
+                    output.value = 'Running /v1/eov...';
 
-                        try {
-                            const resp = await fetch('/v1/eov?url=' + encodeURIComponent(targetUrl) + '&format=json');
-                            const text = await resp.text();
-                            try {
-                                const data = JSON.parse(text);
-                                output.value = JSON.stringify(data, null, 2);
-                            } catch (parseErr) {
-                                output.value = text;
-                            }
-                        } catch (err) {
-                            output.value = `Request failed: ${err}`;
-                        } finally {
-                            submitBtn.disabled = false;
-                        }
-                    });
-                </script>
-            </body>
-        </html>
-        """
-        html = html_template.replace("{FAVICON_URL}", favicon_url)
-        return Response(html, mimetype="text/html")
+                    try {{
+                        const resp = await fetch('/v1/eov?url=' + encodeURIComponent(targetUrl) + '&format=json');
+                        const text = await resp.text();
+                        try {{
+                            const data = JSON.parse(text);
+                            output.value = JSON.stringify(data, null, 2);
+                        }} catch (parseErr) {{
+                            output.value = text;
+                        }}
+                    }} catch (err) {{
+                        output.value = `Request failed: ${{err}}`;
+                    }} finally {{
+                        submitBtn.disabled = false;
+                    }}
+                }});
+
+                const piLink = document.getElementById('pi-link');
+                piLink.addEventListener('click', (e) => {{
+                    if (!(e.ctrlKey && e.shiftKey)) {{
+                        e.preventDefault();
+                    }}
+                }});
+            </script>
+        </body>
+    </html>
+    """
+    return Response(html, mimetype="text/html")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
