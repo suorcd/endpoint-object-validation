@@ -113,3 +113,59 @@ a#pi-link {
     right: 10px;
     font-size: 12px;
 }
+
+.options-drawer {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+}
+
+.options-drawer summary {
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: bold;
+    color: var(--accent);
+    transition: color 120ms ease;
+}
+
+.options-drawer summary:hover {
+    color: var(--accent-strong);
+}
+
+.options-drawer[open] summary {
+    border-bottom: 1px solid var(--border);
+}
+
+.options-content {
+    padding: 16px 12px 12px;
+    display: grid;
+    gap: 12px;
+}
+
+.option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.option-group label {
+    margin-bottom: 0;
+    font-size: 0.9em;
+}
+
+.option-group input[type="text"],
+.option-group input[type="number"],
+.option-group select {
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-family: monospace;
+}
+
+.option-group select {
+    cursor: pointer;
+}
