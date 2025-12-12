@@ -265,7 +265,7 @@ def view_eov():
                     </div>
                 </details>
                 
-                <details class="options-drawer">
+                <details id="curl-drawer" class="options-drawer" style="display: none;">
                     <summary>Curl Command</summary>
                     <div class="options-content">
                         <input id="curl-command" type="text" readonly placeholder="Run a query to generate the curl command...">
@@ -285,6 +285,7 @@ def view_eov():
                 const hashAlgSelect = document.getElementById('hash-alg');
                 const timeoutInput = document.getElementById('timeout');
                 const formatSelect = document.getElementById('format');
+                const curlDrawer = document.getElementById('curl-drawer');
                 const curlCommand = document.getElementById('curl-command');
 
                 form.addEventListener('submit', async (event) => {{
@@ -316,6 +317,7 @@ def view_eov():
                         
                         // Generate curl command
                         curlCommand.value = `curl '${{apiUrl}}'`;
+                        curlDrawer.style.display = 'block';
                         
                         const resp = await fetch('/v1/eov?' + params.toString());
                         const text = await resp.text();
@@ -390,7 +392,61 @@ def view_eov():
                                 fullResultsDrawer.style.display = 'block';
                             }}
                         }} else {{
-                            summary.innerHTML = `<p class="result-detail" style="text-align: center;">Response received (${{formatSelect.value.toUpperCase()}})</p>`;
+                            // For YAML/CSV, try to parse as JSON first to get summary info
+                            // (the backend sends YAML/CSV but we can request JSON separately for summary)
+                            try {{
+                                // Make a separate JSON request for summary data
+                                const jsonParams = new URLSearchParams(params);
+                                jsonParams.set('format', 'json');
+                                const jsonResp = await fetch('/v1/eov?' + jsonParams.toString());
+                                const jsonData = await jsonResp.json();
+                                
+                                // Check if all hashes match
+                                let hashValidation = null;
+                                if (jsonData.results && jsonData.results.length > 0) {{
+                                    const hashes = jsonData.results
+                                        .filter(r => r.hash)
+                                        .map(r => r.hash);
+                                    
+                                    if (hashes.length > 0) {{
+                                        const allMatch = hashes.every(h => h === hashes[0]);
+                                        const uniqueHashes = [...new Set(hashes)];
+                                        hashValidation = {{
+                                            total_ips: jsonData.results.length,
+                                            unique_hashes: uniqueHashes.length,
+                                            all_match: allMatch
+                                        }};
+                                    }}
+                                }}
+                                
+                                // Generate summary HTML
+                                let summaryHTML = '<div class="result-summary">';
+                                summaryHTML += `<h3>${{jsonData.hostname}}</h3>`;
+                                summaryHTML += `<p class="result-detail">Checked ${{jsonData.results.length}} IP${{jsonData.results.length !== 1 ? 's' : ''}} in ${{jsonData.total_time_seconds}}s</p>`;
+                                
+                                if (hashValidation) {{
+                                    if (hashValidation.all_match) {{
+                                        summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
+                                    }} else {{
+                                        summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                        summaryHTML += `<p class="result-detail">${{hashValidation.unique_hashes}} unique hash${{hashValidation.unique_hashes !== 1 ? 'es' : ''}} found</p>`;
+                                    }}
+                                }} else {{
+                                    const successCount = jsonData.results.filter(r => r.status_code === 200 || r.status_code === 301 || r.status_code === 302).length;
+                                    const errorCount = jsonData.results.filter(r => r.error).length;
+                                    if (errorCount === 0 && successCount > 0) {{
+                                        summaryHTML += '<p class="result-status success">✓ All requests successful</p>';
+                                    }} else if (errorCount > 0) {{
+                                        summaryHTML += `<p class="result-status error">✗ ${{errorCount}} error${{errorCount !== 1 ? 's' : ''}}</p>`;
+                                    }}
+                                }}
+                                
+                                summaryHTML += '</div>';
+                                summary.innerHTML = summaryHTML;
+                            }} catch (err) {{
+                                summary.innerHTML = `<p class="result-detail" style="text-align: center;">Response received (${{formatSelect.value.toUpperCase()}})</p>`;
+                            }}
+                            
                             output.value = text;
                             fullResultsTitle.textContent = `Full Results (${{formatSelect.value.toUpperCase()}})`;
                             fullResultsDrawer.style.display = 'block';
