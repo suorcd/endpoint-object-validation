@@ -221,7 +221,12 @@ def view_eov():
                     </div>
                 </form>
                 
-                <div id="summary" class="summary-output"></div>
+                <div id="summary" class="summary-output">
+                    <div class="help-text">
+                        <p>Check if all IP addresses for a hostname return identical content.</p>
+                        <p style="margin-top: 8px; font-size: 0.9em; color: var(--muted);">Enter a URL above to validate object consistency and detect discrepancies.</p>
+                    </div>
+                </div>
                 
                 <details class="options-drawer">
                     <summary>Advanced Options</summary>
