@@ -222,9 +222,7 @@ def view_eov():
                 </form>
                 <textarea id="output" readonly placeholder="Results will appear here..."></textarea>
             </div>
-            <div class="easter-egg">
-                <a id="pi-link" href="/r2.html" title="Dale: Click it and then press Ctrl+Shift">π</a>
-            </div>
+
             <script>
                 const form = document.getElementById('eov-form');
                 const urlInput = document.getElementById('url');
@@ -265,6 +263,9 @@ def view_eov():
                     }}
                 }});
             </script>
+            <div class="easter-egg">
+                <a id="pi-link" href="/r2.html" title="Dale: Click it and then press Ctrl+Shift">π</a>
+            </div>
         </body>
     </html>
     """
