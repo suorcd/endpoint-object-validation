@@ -215,8 +215,10 @@ def view_eov():
                 <h2>EOV Viewer</h2>
                 <form id="eov-form">
                     <label for="url">Target URL</label>
-                    <input id="url" name="url" type="text" placeholder="https://example.com" required>
-                    <button id="submit" type="submit">Run /v1/eov</button>
+                    <div class="url-input-group">
+                        <input id="url" name="url" type="text" placeholder="https://example.com" required>
+                        <button id="submit" type="submit">Run /v1/eov</button>
+                    </div>
                 </form>
                 <textarea id="output" readonly placeholder="Results will appear here..."></textarea>
             </div>

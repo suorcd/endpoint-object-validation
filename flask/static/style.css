@@ -47,8 +47,14 @@ label {
     font-weight: bold;
 }
 
+.url-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
 input[type=text] {
-    width: 100%;
+    flex: 1;
     padding: 12px;
     border-radius: 8px;
     border: 1px solid var(--border);
@@ -57,7 +63,6 @@ input[type=text] {
 }
 
 button {
-    margin-top: 12px;
     padding: 11px 16px;
     border: none;
     border-radius: 8px;
@@ -66,6 +71,7 @@ button {
     cursor: pointer;
     font-weight: bold;
     transition: transform 120ms ease, box-shadow 120ms ease;
+    white-space: nowrap;
 }
 
 button:hover {
