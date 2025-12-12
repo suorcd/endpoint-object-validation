@@ -212,7 +212,7 @@ def view_eov():
         </head>
         <body>
             <div class="panel">
-                <h2>EOV Viewer</h2>
+                <h2>Endpoint Object Validation</h2>
                 <form id="eov-form">
                     <label for="url">Target URL</label>
                     <div class="url-input-group">
