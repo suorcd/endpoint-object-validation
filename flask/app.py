@@ -278,13 +278,13 @@ def view_eov():
                         const params = new URLSearchParams({{
                             url: targetUrl,
                             format: formatSelect.value,
-                            timeout: timeoutInput.value
+                            timeout: timeoutInput.value,
+                            hash_alg: hashAlgSelect.value
                         }});
                         
                         const hashValue = hashInput.value.trim();
                         if (hashValue) {{
                             params.append('hash', hashValue);
-                            params.append('hash-alg', hashAlgSelect.value);
                         }}
 
                         const resp = await fetch('/v1/eov?' + params.toString());
