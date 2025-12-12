@@ -70,3 +70,5 @@ flask --app app run --host=0.0.0.0 --port=5000 --debug
 ## Flask Web Service
 
 For an HTTP API version of EOV, see `flask/README.md`. The Flask app exposes `/v1/eov` with parity to the bash script and includes Kubernetes and Tailscale deployment guides.
+
+![Flask UI Demo](flask/static/demo00.png)
