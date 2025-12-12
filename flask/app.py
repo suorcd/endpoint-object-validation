@@ -14,11 +14,16 @@ import yaml
 import csv
 import io
 import concurrent.futures
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Disable SSL warnings when using verify=False
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
+
+# Fix: Tell Flask to trust X-Forwarded-* headers from the proxy (Tailscale/Ingress)
+# x_proto=1 ensures request.scheme matches the protocol used by the client (http vs https)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # Base64 encoded ASCII art
 encoded_ascii = "Li0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0uCnwgTmV2ZXIgZ29ubmEgZ2l2ZSB5b3UgdXAgICAgICAgICAgfAp8IE5ldmVyIGdvbm5hIGxldCB5b3UgZG93biAgICAgICAgIHwKfCBOZXZlciBnb25uYSBydW4gYXJvdW5kIGFuZCBkZXNlcnR8CnwgeW91ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfAonLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLScKICAgICAgICAgICAgLj0oKCg9LiAgICAgICAKICAgICAgICAgIGk7JyAgIGA6aSAgICAgIAogICAgICAgICAgIV9fICAgX18hICAgICAgCiAgICAgICAgICh+KF8pLShfKX4pICAgICAKICAgICAgICAgIHwgICBuICAgwqEgICAgICAKICAgICAgICAgIFwgIC0gIC8gICAgICAgCiAgICAgICAgICAhYC0tLSchICAgICAgIAogICAgICAgICAgL2AtLl8uLSdcICAgICAgCiAgICBfLi1+J1xfLyB8b1xfL2B+LS5fIAogICAgJyAgICAgICAgfG8gICAgICAgIGAKICAgIFwuICAgICAgX3xfICAgICAgLi8gCiAgICAgIGAtLiAgICAgICAgICAuLScgICAKICAgIGB+LS0tLS0tficK"
