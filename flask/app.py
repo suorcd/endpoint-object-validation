@@ -306,6 +306,34 @@ def view_eov():
                         if (formatSelect.value === 'json') {{
                             try {{
                                 const data = JSON.parse(text);
+                                
+                                // Check if all hashes match
+                                if (data.results && data.results.length > 0) {{
+                                    const hashes = data.results
+                                        .filter(r => r.hash)
+                                        .map(r => r.hash);
+                                    
+                                    if (hashes.length > 0) {{
+                                        const allMatch = hashes.every(h => h === hashes[0]);
+                                        const uniqueHashes = [...new Set(hashes)];
+                                        
+                                        data.hash_validation = {{
+                                            total_ips: data.results.length,
+                                            unique_hashes: uniqueHashes.length,
+                                            all_match: allMatch
+                                        }};
+                                        
+                                        if (!allMatch) {{
+                                            data.hash_validation.mismatches = uniqueHashes.map(hash => ({{
+                                                hash: hash,
+                                                ips: data.results
+                                                    .filter(r => r.hash === hash)
+                                                    .map(r => r.ip)
+                                            }}));
+                                        }}
+                                    }}
+                                }}
+                                
                                 output.value = JSON.stringify(data, null, 2);
                             }} catch (parseErr) {{
                                 output.value = text;
