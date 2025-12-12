@@ -1,0 +1,250 @@
+/* Dark Tango-inspired theme */
+:root {
+    --bg: #2e3436;
+    --panel: #24282b;
+    --border: #555753;
+    --text: #eeeeec;
+    --muted: #c0c6c8;
+    --accent: #f57900;
+    --accent-strong: #fcaf3e;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: monospace;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+}
+
+.panel {
+    width: 100%;
+    max-width: 720px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+h2 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+    text-align: center;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+}
+
+.url-input-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+input[type=text] {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+}
+
+button {
+    padding: 11px 16px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+    color: #fff;
+    cursor: pointer;
+    font-weight: bold;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+    white-space: nowrap;
+}
+
+button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+textarea {
+    width: 100%;
+    height: 640px;
+    margin-top: 16px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-family: monospace;
+    resize: vertical;
+}
+
+a#pi-link {
+    color: var(--muted);
+    text-decoration: none;
+    cursor: default;
+    user-select: none;
+}
+
+.easter-egg {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    font-size: 12px;
+}
+
+.options-drawer {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+}
+
+.options-drawer summary {
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+    font-weight: bold;
+    color: var(--accent);
+    transition: color 120ms ease;
+}
+
+.options-drawer summary:hover {
+    color: var(--accent-strong);
+}
+
+.options-drawer[open] summary {
+    border-bottom: 1px solid var(--border);
+}
+
+.options-content {
+    padding: 16px 12px 12px;
+    display: grid;
+    gap: 12px;
+}
+
+.option-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.option-group label {
+    margin-bottom: 0;
+    font-size: 0.9em;
+}
+
+.option-group input[type="text"],
+.option-group input[type="number"],
+.option-group select,
+#curl-command {
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-family: monospace;
+}
+
+#curl-command {
+    width: 100%;
+    font-size: 0.9em;
+}
+
+.option-group select {
+    cursor: pointer;
+}
+
+.summary-output {
+    margin-top: 16px;
+    min-height: 60px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.result-summary {
+    background: var(--bg);
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    text-align: center;
+    width: 100%;
+}
+
+.help-text {
+    text-align: center;
+    color: var(--muted);
+}
+
+.help-text p {
+    margin: 0;
+}
+
+.help-text strong {
+    color: var(--text);
+}
+
+.result-summary h3 {
+    margin: 0 0 8px 0;
+    color: var(--accent-strong);
+    font-size: 1.2em;
+}
+
+.result-detail {
+    margin: 6px 0;
+    color: var(--muted);
+    font-size: 0.95em;
+}
+
+.result-status {
+    margin: 12px 0 6px 0;
+    font-size: 1.1em;
+    font-weight: bold;
+}
+
+.result-status.success {
+    color: #8ae234;
+}
+
+.result-status.error {
+    color: #ef2929;
+}
+
+#full-results-drawer textarea {
+    width: 100%;
+    height: 400px;
+    font-family: monospace;
+    font-size: 0.9em;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    resize: vertical;
+}

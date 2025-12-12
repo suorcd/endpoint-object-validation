@@ -1,42 +1,72 @@
-# Endpoint Check Script
+# Endpoint Object Validation
 
-This script checks the availability of a given URL by resolving its hostname to IP addresses and downloading the content from each IP address.
-It can also compute and compare hash values (e.g., `md5`, `sha512`) of the downloaded content.
+This repository provides endpoint object validation in two implementations:
 
-## Usage
+1. **Bash Script (`eov.sh`)** — Lightweight CLI tool
+2. **Flask Web Service** — HTTP API with Kubernetes deployment (implements `/v1/eov`)
 
-```shell
-./epc.sh <URL> [--hash HASH] [--file FILE] [--hash-alg HASH_ALG] [--debug]
+## Bash Script Usage (`eov.sh`)
 
+```bash
+./eov.sh <URL> [--hash HASH] [--file FILE] [--hash-alg HASH_ALG] [--debug]
 
-## nix Usage
+# Examples
+./eov.sh http://example.com
+./eov.sh http://example.com --hash d41d8cd98f00b204e9800998ecf8427e
+./eov.sh http://example.com --file /path/to/file
+./eov.sh http://example.com --hash-alg sha512
+./eov.sh http://example.com --debug
+```
 
-To use the `epc.sh` script, follow the instructions below:
+**Arguments**
+- `--hash HASH` — compare downloaded content hash against expected
+- `--file FILE` — compute hash from local file instead of remote content
+- `--hash-alg HASH_ALG` — hashing command prefix (default `md5`; expects `<alg>sum` to exist)
+- `--debug` — verbose output and directory traversal
 
-### Building the Package
+**Requirements**
+- `curl`, `drill`, and the chosen hash utility (e.g., `md5sum`, `sha256sum`)
+- DNS and HTTP(S) egress to the target hostname
+- Bash shell
 
-1. **Build the package using Nix Flakes**:
-   ```shell
-   nix build
-   ```
+## Nix Usage
 
-Examples
-Basic Usage:
-`./result/bin/epc.sh http://example.com`
-With Hash Comparison:
-`./result/bin/epc.sh http://example.com --hash d41d8cd98f00b204e9800998ecf8427e`
-With File Hash Comparison:
-`./result/bin/epc.sh http://example.com --file /path/to/file`
-With Custom Hash Algorithm:
-`./result/bin/epc.sh http://example.com --hash-alg sha512`
-With Debug Mode:
-`./result/bin/epc.sh http://example.com --debug`
+Build and run via flakes:
 
+```bash
+nix build
+./result/bin/eov.sh <URL> [flags]
+```
 
+For development:
 
-### nix Explanation
+```bash
+nix develop   # enter shell with dependencies
+./eov.sh <URL> --debug
+```
 
-1. **Building the Package**: Instructions to build the package using Nix Flakes.
-2. **Running the Script**: Instructions to run the script from the built package.
-3. **Arguments**: Detailed explanation of the command-line arguments.
-4. **Examples**: Usage examples demonstrating different ways to use the script.
+Dev shells (choose one):
+
+```bash
+# Default (Flask + bash tools)
+nix develop
+
+# Bash-only shell
+nix develop .#bash
+
+# Flask-focused shell
+nix develop .#flask
+
+# Run Flask dev server from any shell
+cd flask
+flask --app app run --host=0.0.0.0 --port=5000 --debug
+```
+
+## Developing `eov.sh`
+- Run locally with `--debug` to inspect workdir and resolved IPs.
+- Validate hashes by providing `--hash` or `--file` (the script uses `<hash_alg>sum`).
+- If using ShellCheck, address warnings before committing (no config required here).
+
+## Flask Web Service
+
+For an HTTP API version of EOV, see `flask/README.md`. The Flask app exposes `/v1/eov` with parity to the bash script and includes Kubernetes and Tailscale deployment guides.
