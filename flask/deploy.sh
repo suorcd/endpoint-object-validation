@@ -11,9 +11,22 @@ if [[ "$1" == "--tailscale" ]]; then
     TAILSCALE=true
 fi
 
+# Configuration
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Load .env if it exists
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    source "$SCRIPT_DIR/.env"
+fi
+
+# Set default image name if not provided in .env
+IMAGE_NAME="${IMAGE_NAME:-ghcr.io/suorcd/eov-flask:latest}"
+
 echo "=========================================="
 echo "Kubernetes Cluster Setup"
 echo "=========================================="
+echo "Target Image: $IMAGE_NAME"
+
 if $TAILSCALE; then
     echo "Tailscale deployment enabled"
 else
@@ -32,21 +45,30 @@ echo "✓ Cluster is reachable"
 echo ""
 echo "Step 0: Building and pushing Docker image..."
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-docker build -t gitea.ser.ink/ser/eov-flask:latest .
-docker push gitea.ser.ink/ser/eov-flask:latest
+docker build -t "$IMAGE_NAME" .
+docker push "$IMAGE_NAME"
 echo "✓ Docker image built and pushed"
 
-# Step 1: Apply configuration (No deletion needed!)
-# Kubernetes 'apply' is declarative and handles updates automatically.
+# Step 1: Apply configuration
 echo ""
 echo "Step 1: Applying configuration..."
 
-# Apply YAML files
-kubectl apply -f "$SCRIPT_DIR/eov-flask-deployment.yaml"
+# Apply YAML files with a fallback for immutable selector errors
+# (deployment selectors are immutable; if they changed, delete/recreate the deployment)
+set +e
+sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-deployment.yaml" | kubectl apply -f -
+APPLY_STATUS=$?
+if [[ $APPLY_STATUS -ne 0 ]]; then
+    echo "Apply failed (likely immutable selector). Deleting deployment/eov-flask and retrying..."
+    kubectl delete deployment/eov-flask --ignore-not-found
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-deployment.yaml" | kubectl apply -f - || exit 1
+fi
+set -e
+
 kubectl apply -f "$SCRIPT_DIR/eov-flask-ingress.yaml"
+
 if $TAILSCALE; then
     kubectl apply -f "$SCRIPT_DIR/tailscale-deployment.yaml"
 fi
