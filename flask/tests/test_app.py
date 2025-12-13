@@ -91,9 +91,9 @@ def test_v1_eov_success_csv(mock_check, mock_socket, client):
     assert rv.status_code == 200
     assert rv.mimetype == 'text/csv'
     content = rv.data.decode('utf-8')
-    assert 'ip,status_code,hash' in content or 'hash,ip' in content # checking partial header presence
-    assert '1.1.1.1' in content
-    assert 'abc' in content
+    # The app sorts keys alphabetically: eov_server, file_size_bytes, hash, hash_alg, ip, status_code
+    assert 'eov_server,file_size_bytes,hash,hash_alg,ip,status_code' in content
+    assert 'local,123,abc,md5,1.1.1.1,200' in content
 
 @patch('app.concurrent.futures.ThreadPoolExecutor')
 def test_v1_eov_remote_endpoints(mock_executor, client):
