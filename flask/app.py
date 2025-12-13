@@ -391,7 +391,7 @@ def view_eov():
                         <div class="option-group">
                             <label for="eov-endpoints">External EOV Endpoints (Optional)</label>
                             <input id="eov-endpoints" name="eov-endpoints" type="text" placeholder="https://eov-us.example.com, https://eov-eu.example.com">
-                            <p style="margin: 4px 0 0 0; font-size: 0.8em; color: var(--muted);">Comma-separated. If empty, uses local instance.</p>
+                            <p style="margin: 4px 0 0 0; font-size: 0.8em; color: var(--muted);">Comma-separated. Defaults to current instance; add others to aggregate results.</p>
                         </div>
                         <div class="option-group">
                             <label for="timeout">Timeout (seconds)</label>
@@ -437,6 +437,11 @@ def view_eov():
                 const formatSelect = document.getElementById('format');
                 const curlCommand = document.getElementById('curl-command');
                 const eovEndpointsInput = document.getElementById('eov-endpoints');
+
+                // Default EOV Endpoints to current origin
+                if (!eovEndpointsInput.value) {{
+                    eovEndpointsInput.value = window.location.origin;
+                }}
 
                 function parseCSV(text) {{
                     const lines = text.trim().split(/\\r?\\n/);
