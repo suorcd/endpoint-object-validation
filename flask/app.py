@@ -196,8 +196,9 @@ def v1_eov():
     format = request.args.get('format', 'json').lower()
     eov_endpoints_str = request.args.get('eov_endpoints', '').strip()
     
-    # Simple Security Guardrail
-    forbidden_hosts = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254']
+    # Simple Security Guardrail for TARGET URL
+    # We want to prevent the tool from scanning the container's own network or localhost services
+    forbidden_target_hosts = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254']
     
     # Record start time
     start_time = time.time()
@@ -215,7 +216,7 @@ def v1_eov():
     scheme = parsed.scheme
     protocol = 443 if scheme == 'https' else 80
     
-    if not hostname or hostname in forbidden_hosts:
+    if not hostname or hostname in forbidden_target_hosts:
         return jsonify({'error': 'Invalid or forbidden hostname'}), 400
     
     # Get hash function
@@ -240,7 +241,9 @@ def v1_eov():
         valid_endpoints = []
         for ep in endpoints:
             ep_parsed = urlparse(ep if ep.startswith('http') else f'http://{ep}')
-            if ep_parsed.hostname and ep_parsed.hostname not in forbidden_hosts:
+            # We allow localhost/127.0.0.1 for EOV aggregation (self-referencing), 
+            # but we still block cloud metadata service.
+            if ep_parsed.hostname and ep_parsed.hostname != '169.254.169.254':
                 valid_endpoints.append(ep)
         
         if not valid_endpoints:
