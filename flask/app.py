@@ -418,7 +418,7 @@ def view_eov():
                     </div>
                 </details>
                 
-                <details class="options-drawer">
+                <details id="curl-command-drawer" class="options-drawer" style="display: none;">
                     <summary>Curl Command</summary>
                     <div class="options-content">
                         <input id="curl-command" type="text" readonly placeholder="Run a query to generate the curl command...">
@@ -439,6 +439,7 @@ def view_eov():
                 const timeoutInput = document.getElementById('timeout');
                 const formatSelect = document.getElementById('format');
                 const curlCommand = document.getElementById('curl-command');
+                const curlCommandDrawer = document.getElementById('curl-command-drawer');
                 const eovEndpointsInput = document.getElementById('eov-endpoints');
 
                 // FIX: Do not default to window.location.origin.
@@ -601,6 +602,7 @@ def view_eov():
                     submitBtn.innerHTML = '<span class="spinner"></span>Running...';
                     summary.innerHTML = '<p style="text-align: center; color: var(--muted);">Resolving IPs and fetching content...</p>';
                     fullResultsDrawer.style.display = 'none';
+                    curlCommandDrawer.style.display = 'none';
 
                     try {{
                         const paramsObj = {{
@@ -624,6 +626,7 @@ def view_eov():
 
                         const apiUrl = window.location.origin + '/v1/eov?' + params.toString();
                         curlCommand.value = `curl '${{apiUrl}}'`;
+                        curlCommandDrawer.style.display = 'block';
                         
                         const resp = await fetch('/v1/eov?' + params.toString());
                         const text = await resp.text();
