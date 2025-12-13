@@ -142,6 +142,48 @@ def check_single_ip(ip, url, hostname, scheme, timeout, hash_func, hash_alg, exp
         
     return result
 
+def query_external_eov(eov_base_url, target_url, params):
+    """
+    Query an external EOV instance and return its results.
+    """
+    # Normalize EOV URL
+    eov_url = eov_base_url.strip()
+    if not eov_url.startswith('http'):
+        eov_url = f'https://{eov_url}'
+    
+    # Ensure it points to the API endpoint
+    if not eov_url.endswith('/v1/eov'):
+        eov_url = eov_url.rstrip('/') + '/v1/eov'
+        
+    query_params = {
+        'url': target_url,
+        'format': 'json',
+        'hash_alg': params.get('hash_alg', 'md5'),
+        'timeout': params.get('timeout', 33)
+    }
+    
+    if params.get('hash'):
+        query_params['hash'] = params['hash']
+
+    try:
+        resp = requests.get(eov_url, params=query_params, timeout=int(params.get('timeout', 33)) + 5, verify=False)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        results = data.get('results', [])
+        # Tag results with the source
+        for r in results:
+            r['eov_server'] = eov_base_url
+            
+        return results
+    except Exception as e:
+        return [{
+            'eov_server': eov_base_url,
+            'error': f"EOV Node Error: {str(e)}",
+            'ip': '0.0.0.0', # Placeholder to ensure it shows up
+            'status_code': 0
+        }]
+
 @app.route("/v1/eov")
 def v1_eov():
     """
@@ -152,9 +194,11 @@ def v1_eov():
     hash_alg = request.args.get('hash_alg', 'md5').lower()
     timeout = int(request.args.get('timeout', 33))
     format = request.args.get('format', 'json').lower()
+    eov_endpoints_str = request.args.get('eov_endpoints', '').strip()
     
-    # Simple Security Guardrail
-    forbidden_hosts = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254']
+    # Simple Security Guardrail for TARGET URL
+    # We want to prevent the tool from scanning the container's own network or localhost services
+    forbidden_target_hosts = ['localhost', '127.0.0.1', '0.0.0.0', '169.254.169.254']
     
     # Record start time
     start_time = time.time()
@@ -163,7 +207,7 @@ def v1_eov():
     if not url:
         return jsonify({
             'error': 'URL parameter is required',
-            'usage': '/v1/eov?url=<URL>&hash=<HASH>&hash_alg=<md5|sha1|sha256>&timeout=<SECONDS>&format=<json|yaml|csv>'
+            'usage': '/v1/eov?url=<URL>&hash=<HASH>&hash_alg=<md5|sha1|sha256>&timeout=<SECONDS>&format=<json|yaml|csv>&eov_endpoints=<URL1,URL2>'
         }), 400
     
     # Parse URL
@@ -172,7 +216,7 @@ def v1_eov():
     scheme = parsed.scheme
     protocol = 443 if scheme == 'https' else 80
     
-    if not hostname or hostname in forbidden_hosts:
+    if not hostname or hostname in forbidden_target_hosts:
         return jsonify({'error': 'Invalid or forbidden hostname'}), 400
     
     # Get hash function
@@ -186,33 +230,68 @@ def v1_eov():
         return jsonify({'error': f'Unsupported hash algorithm: {hash_alg}'}), 400
     
     hash_func = hash_functions[hash_alg]
-    
-    # Resolve hostname to IP addresses using system DNS
-    try:
-        ips = socket.gethostbyname_ex(hostname)[2]
-    except Exception as e:
-        return jsonify({'error': f'Failed to resolve hostname: {str(e)}'}), 500
-    
     results = []
     
-    # Use ThreadPoolExecutor for parallel execution
-    # Limit max_workers to avoid exhausting system resources
-    max_workers = min(len(ips), 20)
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_ip = {
-            executor.submit(
-                check_single_ip, 
-                ip, url, hostname, scheme, timeout, hash_func, hash_alg, expected_hash
-            ): ip for ip in ips
+    # Logic Branch: Remote EOV Aggregation vs Local Check
+    if eov_endpoints_str:
+        # --- REMOTE EOV MODE ---
+        endpoints = [x.strip() for x in eov_endpoints_str.split(',') if x.strip()]
+        
+        # Guardrail for external EOV URLs too
+        valid_endpoints = []
+        for ep in endpoints:
+            ep_parsed = urlparse(ep if ep.startswith('http') else f'http://{ep}')
+            # We allow localhost/127.0.0.1 for EOV aggregation (self-referencing), 
+            # but we still block cloud metadata service.
+            if ep_parsed.hostname and ep_parsed.hostname != '169.254.169.254':
+                valid_endpoints.append(ep)
+        
+        if not valid_endpoints:
+             return jsonify({'error': 'No valid external EOV endpoints provided'}), 400
+
+        params = {
+            'hash': expected_hash,
+            'hash_alg': hash_alg,
+            'timeout': timeout
         }
         
-        # Collect results as they complete
-        for future in concurrent.futures.as_completed(future_to_ip):
-            results.append(future.result())
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(valid_endpoints)) as executor:
+            future_to_url = {
+                executor.submit(query_external_eov, ep, url, params): ep 
+                for ep in valid_endpoints
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_url):
+                external_results = future.result()
+                results.extend(external_results)
+                
+    else:
+        # --- LOCAL MODE ---
+        # Resolve hostname to IP addresses using system DNS
+        try:
+            ips = socket.gethostbyname_ex(hostname)[2]
+        except Exception as e:
+            return jsonify({'error': f'Failed to resolve hostname: {str(e)}'}), 500
+        
+        # Use ThreadPoolExecutor for parallel execution
+        max_workers = min(len(ips), 20)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_ip = {
+                executor.submit(
+                    check_single_ip, 
+                    ip, url, hostname, scheme, timeout, hash_func, hash_alg, expected_hash
+                ): ip for ip in ips
+            }
+            
+            for future in concurrent.futures.as_completed(future_to_ip):
+                res = future.result()
+                res['eov_server'] = 'local'
+                results.append(res)
     
-    # Sort results by IP for consistency
-    results.sort(key=lambda x: x['ip'])
+    # Sort results
+    # If using multiple EOVs, we might have duplicate IPs. Sorting by IP groups them.
+    results.sort(key=lambda x: (x.get('ip', ''), x.get('eov_server', '')))
 
     # Calculate total time
     end_time = time.time()
@@ -313,6 +392,11 @@ def view_eov():
                             </select>
                         </div>
                         <div class="option-group">
+                            <label for="eov-endpoints">External EOV Endpoints (Optional)</label>
+                            <input id="eov-endpoints" name="eov-endpoints" type="text" placeholder="https://eov-us.example.com, https://eov-eu.example.com">
+                            <p style="margin: 4px 0 0 0; font-size: 0.8em; color: var(--muted);">Comma-separated. Leave empty to check locally on this node.</p>
+                        </div>
+                        <div class="option-group">
                             <label for="timeout">Timeout (seconds)</label>
                             <input id="timeout" name="timeout" type="number" value="33" min="1" max="300">
                         </div>
@@ -355,6 +439,14 @@ def view_eov():
                 const timeoutInput = document.getElementById('timeout');
                 const formatSelect = document.getElementById('format');
                 const curlCommand = document.getElementById('curl-command');
+                const eovEndpointsInput = document.getElementById('eov-endpoints');
+
+                // FIX: Do not default to window.location.origin.
+                // This causes the container to try and resolve its own public Tailscale DNS,
+                // which often fails inside the cluster (NameResolutionError).
+                // if (!eovEndpointsInput.value) {{
+                //    eovEndpointsInput.value = window.location.origin;
+                // }}
 
                 function parseCSV(text) {{
                     const lines = text.trim().split(/\\r?\\n/);
@@ -511,12 +603,19 @@ def view_eov():
                     fullResultsDrawer.style.display = 'none';
 
                     try {{
-                        const params = new URLSearchParams({{
+                        const paramsObj = {{
                             url: targetUrl,
                             format: formatSelect.value,
                             timeout: timeoutInput.value,
                             hash_alg: hashAlgSelect.value
-                        }});
+                        }};
+                        
+                        const endpoints = eovEndpointsInput.value.trim();
+                        if (endpoints) {{
+                            paramsObj.eov_endpoints = endpoints;
+                        }}
+
+                        const params = new URLSearchParams(paramsObj);
                         
                         const hashValue = hashInput.value.trim();
                         if (hashValue) {{

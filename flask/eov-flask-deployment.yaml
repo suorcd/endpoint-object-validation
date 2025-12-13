@@ -1,68 +1,184 @@
-# 1. ConfigMap is no longer needed for code, 
-# but we might keep one for configuration if needed later.
-# (Removed to simplify, as code is now in the Docker image)
+---
+# Tailscale Operator ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tailscale-operator
+  namespace: default
 
-# 2. Flask Server (Deployment)
+---
+# Tailscale Operator ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tailscale-operator
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "create", "patch"]
+
+---
+# Tailscale Operator ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tailscale-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tailscale-operator
+subjects:
+- kind: ServiceAccount
+  name: tailscale-operator
+  namespace: default
+
+---
+# NOTE: Tailscale Auth Secret is created by tailscale-setup.sh
+# Do not define it here to avoid overwriting the auth key
+
+---
+# Tailscale Proxy Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: eov-flask
+  name: eov-flask-tailscale
   labels:
-    app: flask-eov
+    app: eov-flask-tailscale
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
-      app: flask-eov
+      app: eov-flask-tailscale
   template:
     metadata:
       labels:
-        app: flask-eov
+        app: eov-flask-tailscale
     spec:
+      serviceAccountName: tailscale-operator
       containers:
-      - name: flask-eov
-        # Using image from registry
-        image: ${IMAGE_NAME}
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 5000
+      # Removed nginx-proxy to avoid port 80 conflict; Tailscale now handles port 80 directly.
+      - name: tailscale
+        image: tailscale/tailscale:latest
+        imagePullPolicy: IfNotPresent
         
-        # Resources prevent one pod from crashing the node
+        env:
+        - name: TS_AUTHKEY
+          valueFrom:
+            secretKeyRef:
+              name: tailscale-auth
+              key: auth-key
+        - name: TS_HOSTNAME
+          value: "eov-flask"
+        - name: TS_ACCEPT_DNS
+          value: "true"
+        - name: TS_ROUTES
+          value: ""
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+        - name: TS_SERVE_CONFIG
+          value: "/config/serve.json"
+        
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
+        
         resources:
           requests:
-            memory: "64Mi"
-            cpu: "100m"
+            memory: "32Mi"
+            cpu: "50m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
-
-        # Liveness: Restart pod if it deadlocks
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 5000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-
-        # Readiness: Don't send traffic until ready
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 5000
-          initialDelaySeconds: 2
-          periodSeconds: 5
+            memory: "128Mi"
+            cpu: "200m"
+        
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        
+        volumeMounts:
+        - name: state
+          mountPath: /var/lib/tailscale
+        - name: config
+          mountPath: /config
+      
+      volumes:
+      - name: state
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: tailscale-serve-config
+          optional: true
 
 ---
-# 3. Service to expose Flask app
+# Tailscale Serve Configuration ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-serve-config
+  namespace: default
+data:
+  # The PLACEHOLDER string below will be replaced by tailscale-setup.sh
+  serve.json: |
+    {
+      "TCP": {
+        "80": {
+          "HTTP": true
+        },
+        "443": {
+          "HTTPS": true
+        }
+      },
+      "Web": {
+        "eov-flask.PLACEHOLDER_TAILNET_NAME:80": {
+          "Handlers": {
+            "/": {
+              "Proxy": "http://eov-flask-service.default.svc.cluster.local:80"
+            }
+          }
+        },
+        "eov-flask.PLACEHOLDER_TAILNET_NAME:443": {
+          "Handlers": {
+            "/": {
+              "Proxy": "http://eov-flask-service.default.svc.cluster.local:80"
+            }
+          }
+        }
+      }
+    }
+
+---
+# Service for Tailscale proxy
 apiVersion: v1
 kind: Service
 metadata:
-  name: eov-flask-service
+  name: eov-flask-tailscale-service
+  namespace: default
 spec:
-  type: ClusterIP
   selector:
-    app: flask-eov
+    app: eov-flask-tailscale
   ports:
-  - name: http
-    port: 80
-    targetPort: 5000
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 443
+    protocol: TCP
+    name: https
+  type: ClusterIP

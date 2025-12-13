@@ -21,9 +21,8 @@ echo "✓ Cluster is reachable"
 echo ""
 echo "Step 1: Tailscale Authentication"
 echo "To get your auth key:"
-echo "  1. Go to https://login.tailscale.com/"
-echo "  2. Navigate to Settings > Keys"
-echo "  3. Generate a new Auth key (reusable recommended)"
+echo "  1. Go to https://login.tailscale.com/admin/settings/keys"
+echo "  2. Generate a new Auth key (reusable recommended)"
 echo ""
 read -p "Enter your Tailscale Auth Key: " AUTH_KEY
 
@@ -32,9 +31,23 @@ if [ -z "$AUTH_KEY" ]; then
     exit 1
 fi
 
-# Step 2: Create the Tailscale secret
+# Step 2: Get Tailnet Name
 echo ""
-echo "Step 2: Creating Tailscale authentication secret..."
+echo "Step 2: Tailnet Name Configuration"
+echo "We need your Tailnet name to configure the internal proxy."
+echo "  1. Go to https://login.tailscale.com/admin/dns"
+echo "  2. Copy the 'Tailnet name' at the top (e.g., panda-beta.ts.net)"
+echo ""
+read -p "Enter your Tailnet Name: " TAILNET_NAME
+
+if [ -z "$TAILNET_NAME" ]; then
+    echo "ERROR: Tailnet name cannot be empty"
+    exit 1
+fi
+
+# Step 3: Create the Tailscale secret
+echo ""
+echo "Step 3: Creating Tailscale authentication secret..."
 
 kubectl create secret generic tailscale-auth \
   --from-literal=auth-key="$AUTH_KEY" \
@@ -44,25 +57,32 @@ kubectl create secret generic tailscale-auth \
 
 echo "✓ Secret created/updated"
 
-# Step 3: Apply Tailscale configuration
+# Step 4: Apply Tailscale configuration with substitution
 echo ""
-echo "Step 3: Applying Tailscale deployment configuration..."
+echo "Step 4: Applying Tailscale deployment configuration..."
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-kubectl apply -f "$SCRIPT_DIR/tailscale-deployment.yaml"
+# Read the template and replace the placeholder with the actual tailnet name
+# We use | as delimiter for sed to avoid issues with dots in domain names
+sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/tailscale-deployment.yaml" | kubectl apply -f -
 
-echo "✓ Tailscale configuration applied"
+echo "✓ Tailscale configuration applied with host: eov-flask.$TAILNET_NAME"
 
-# Step 4: Wait for Tailscale pod to be ready
+# Step 5: Force Restart to pick up ConfigMap changes
 echo ""
-echo "Step 4: Waiting for Tailscale pod to be ready..."
+echo "Step 5: Restarting Tailscale pod to apply new config..."
+kubectl rollout restart deployment/eov-flask-tailscale -n default
+
+# Step 6: Wait for Tailscale pod to be ready
+echo ""
+echo "Step 6: Waiting for Tailscale pod to be ready..."
 
 kubectl rollout status deployment/eov-flask-tailscale -n default --timeout=2m
 
 echo "✓ Tailscale is ready"
 
-# Step 5: Get device info
+# Step 7: Get device info
 echo ""
 echo "=========================================="
 echo "Tailscale Setup Complete!"
@@ -70,11 +90,8 @@ echo "=========================================="
 echo ""
 echo "Device registered on your tailnet as: eov-flask"
 echo ""
+echo "Your service should now be accessible via:"
+echo "  https://eov-flask.$TAILNET_NAME"
+echo ""
 echo "To verify:"
-kubectl describe pod -l app=eov-flask-tailscale -n default | grep -A 5 "Environment:"
-echo ""
-echo "Your service is now accessible via:"
-echo "  https://eov-flask.tailnet-name.ts.net"
-echo ""
-echo "To get the Tailscale IP address:"
-echo "  kubectl logs -l app=eov-flask-tailscale -n default | grep -i 'ipv4'"
+echo "  kubectl logs -l app=eov-flask-tailscale -n default | grep -i 'serve'"

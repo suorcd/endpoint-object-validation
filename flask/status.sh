@@ -37,4 +37,5 @@ echo ""
 
 echo "Port 80 Status:"
 echo "Services listening on port 80:"
-kubectl get services -n default -o jsonpath='{range .items[?(@.spec.ports[*].port==80)]}{.metadata.name}{"\t"}{.metadata.namespace}{"\n"}{end}'
+# Fixed JSONPath to correctly handle the list comparison
+kubectl get services -n default -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.ports[?(@.port==80)].port}{"\n"}{end}' | grep "80" || echo "None found"
