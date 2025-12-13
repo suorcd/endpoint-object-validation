@@ -158,19 +158,6 @@ def view_eov():
         .hidden { display: none; }
     </style>"""
     
-    # We load the JS from a separate file usually, but keeping inline for the single-file request nature
-    # To save space in this view, I've truncated the extensive JS block logic which remains identical 
-    # to the original but serves the UI. 
-    # (Note: In a real refactor, move the long HTML string to a template file)
-    
-    with open('flask/app.py', 'r') as f:
-         # Small hack to avoid duplicating the huge HTML string in this response 
-         # since the user already has the UI logic in the original file.
-         # Ideally, use render_template('index.html')
-         pass
-
-    # For the purpose of this file generation, I will include the necessary UI structure 
-    # but reuse the existing JS logic structure in a cleaner variable.
     ui_html = """
         <h2>Endpoint Object Validation</h2>
         <form id="eov-form">
@@ -183,31 +170,40 @@ def view_eov():
         <div id="summary" class="summary-output">
             <div class="help-text">
                 <p>Check if all IP addresses for a hostname return identical content.</p>
+                <p style="margin-top: 8px; font-size: 0.9em; color: var(--muted);">Enter a URL above to validate object consistency and detect discrepancies.</p>
             </div>
         </div>
-        <!-- Drawers for Options and Results would go here -->
-        <details class="options-drawer"><summary>Advanced Options</summary>
+        
+        <details class="options-drawer">
+            <summary>Advanced Options</summary>
             <div class="options-content">
-                <div class="option-group"><label>Expected Hash</label><input id="hash" name="hash" type="text"></div>
-                <div class="option-group"><label>Hash Alg</label><select id="hash-alg"><option value="md5">MD5</option><option value="sha1">SHA1</option><option value="sha256">SHA256</option></select></div>
-                <div class="option-group"><label>External EOV Nodes</label><input id="eov-endpoints" type="text"></div>
-                <div class="option-group"><label>Timeout</label><input id="timeout" type="number" value="33"></div>
-                <div class="option-group"><label>Format</label><select id="format"><option value="json">JSON</option><option value="yaml">YAML</option><option value="csv">CSV</option></select></div>
+                <div class="option-group"><label for="hash">Expected Hash (optional)</label><input id="hash" name="hash" type="text" placeholder="e.g., d41d8cd98f00b204e9800998ecf8427e"></div>
+                <div class="option-group"><label for="hash-alg">Hash Algorithm</label><select id="hash-alg" name="hash-alg"><option value="md5" selected>MD5</option><option value="sha1">SHA1</option><option value="sha256">SHA256</option></select></div>
+                <div class="option-group"><label for="eov-endpoints">External EOV Endpoints (Optional)</label><input id="eov-endpoints" name="eov-endpoints" type="text" placeholder="https://eov-us.example.com, https://eov-eu.example.com"><p style="margin: 4px 0 0 0; font-size: 0.8em; color: var(--muted);">Comma-separated. Leave empty to check locally on this node.</p></div>
+                <div class="option-group"><label for="timeout">Timeout (seconds)</label><input id="timeout" name="timeout" type="number" value="33" min="1" max="300"></div>
+                <div class="option-group"><label for="format">Response Format</label><select id="format" name="format"><option value="json" selected>JSON</option><option value="yaml">YAML</option><option value="csv">CSV</option></select></div>
             </div>
         </details>
-        <details id="full-results-drawer" class="options-drawer" style="display:none"><summary>Full Results</summary><div class="options-content"><textarea id="output" readonly></textarea></div></details>
-        <details id="curl-command-drawer" class="options-drawer" style="display:none"><summary>Curl Command</summary><div class="options-content"><input id="curl-command" type="text" readonly></div></details>
-        <div class="easter-egg"><a id="pi-link" href="/r2.html">π</a></div>
-        <!-- Script block required here (omitted for brevity in Python snippet, strictly identical to original) -->
+        
+        <details id="full-results-drawer" class="options-drawer" style="display: none;">
+            <summary>Full Results (JSON)</summary>
+            <div class="options-content"><textarea id="output" readonly></textarea></div>
+        </details>
+        
+        <details id="curl-command-drawer" class="options-drawer" style="display: none;">
+            <summary>Curl Command</summary>
+            <div class="options-content"><input id="curl-command" type="text" readonly placeholder="Run a query to generate the curl command..."></div>
+        </details>
+        
+        <div class="easter-egg"><a id="pi-link" href="/r2.html" title="Dale: Click it and then press Ctrl+Shift">π</a></div>
+
         <script>
-            // ... [Original JS logic] ...
-            // Re-include the JS from the original file here when deploying
-            // or better yet, move to static/app.js
             const form = document.getElementById('eov-form');
             const urlInput = document.getElementById('url');
             const submitBtn = document.getElementById('submit');
             const summary = document.getElementById('summary');
             const fullResultsDrawer = document.getElementById('full-results-drawer');
+            const fullResultsSummary = fullResultsDrawer.querySelector('summary'); 
             const output = document.getElementById('output');
             const hashInput = document.getElementById('hash');
             const hashAlgSelect = document.getElementById('hash-alg');
@@ -217,42 +213,216 @@ def view_eov():
             const curlCommandDrawer = document.getElementById('curl-command-drawer');
             const eovEndpointsInput = document.getElementById('eov-endpoints');
 
-            // Form submission logic
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="spinner"></span>Running...';
-                summary.innerHTML = '<p style="text-align: center; color: var(--muted);">Fetching...</p>';
+            function parseCSV(text) {
+                const lines = text.trim().split(/\\r?\\n/);
+                if (lines.length < 2) return [];
+                const headers = lines[0].split(',');
+                const hashIdx = headers.indexOf('hash');
+                const ipIdx = headers.indexOf('ip');
+                const errIdx = headers.indexOf('error');
+                const statusIdx = headers.indexOf('status_code');
+                return lines.slice(1).map(line => {
+                    const vals = line.split(',');
+                    const obj = {};
+                    if (hashIdx > -1) obj.hash = vals[hashIdx];
+                    if (ipIdx > -1) obj.ip = vals[ipIdx];
+                    if (errIdx > -1) obj.error = vals[errIdx];
+                    if (statusIdx > -1) obj.status_code = parseInt(vals[statusIdx]);
+                    return obj;
+                });
+            }
+
+            function parseYAML(text) {
+                const parts = text.split('results:');
+                if (parts.length < 2) return [];
+                const resultsBlock = parts[1];
+                const items = [];
+                let currentItem = {};
+                const lines = resultsBlock.split('\\n');
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line) continue;
+                    if (line.startsWith('- ')) {
+                        if (Object.keys(currentItem).length > 0) items.push(currentItem);
+                        currentItem = {};
+                        line = line.substring(2);
+                    }
+                    const colonIdx = line.indexOf(':');
+                    if (colonIdx > -1) {
+                        const k = line.substring(0, colonIdx).trim();
+                        const v = line.substring(colonIdx + 1).trim();
+                        currentItem[k] = v;
+                    }
+                }
+                if (Object.keys(currentItem).length > 0) items.push(currentItem);
+                return items;
+            }
+
+            function performAnalysis(results, hostname, totalTime, expectedHash) {
+                let hashValidation = null;
+                if (results && results.length > 0) {
+                    const hashes = results.filter(r => r.hash).map(r => r.hash);
+                    if (hashes.length > 0) {
+                        const allMatch = hashes.every(h => h === hashes[0]);
+                        const uniqueHashes = [...new Set(hashes)];
+                        hashValidation = {
+                            total_ips: results.length,
+                            unique_hashes: uniqueHashes.length,
+                            all_match: allMatch
+                        };
+                        if (!allMatch) {
+                            hashValidation.mismatches = uniqueHashes.map(hash => ({
+                                hash: hash,
+                                ips: results.filter(r => r.hash === hash).map(r => r.ip)
+                            }));
+                        }
+                    }
+                }
                 
+                let summaryHTML = '<div class="result-summary">';
+                if (hostname) summaryHTML += `<h3>${hostname}</h3>`;
+                
+                if (results.length > 0) {
+                        const timeStr = totalTime ? ` in ${totalTime}s` : '';
+                        summaryHTML += `<p class="result-detail">Checked ${results.length} IP${results.length !== 1 ? 's' : ''}${timeStr}</p>`;
+                        
+                        if (hashValidation) {
+                        if (expectedHash) {
+                            const normExpected = expectedHash.toLowerCase().trim();
+                            const normHashes = results.filter(r => r.hash).map(r => r.hash.toLowerCase());
+                            const allMatchExpected = normHashes.every(h => h === normExpected);
+                            
+                            if (allMatchExpected) {
+                                summaryHTML += '<p class="result-status success">✓ All hashes match expected value</p>';
+                            } else {
+                                const allConsistent = normHashes.every(h => h === normHashes[0]);
+                                if (allConsistent) {
+                                        summaryHTML += '<p class="result-status error">✗ Hash does not match expected value</p>';
+                                        summaryHTML += `<p class="result-detail">Expected: ${expectedHash.substring(0, 16)}...<br>Actual: ${results[0].hash.substring(0, 16)}...</p>`;
+                                } else {
+                                        summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                        const matchCount = normHashes.filter(h => h === normExpected).length;
+                                        if (matchCount > 0) {
+                                        summaryHTML += `<p class="result-detail">${matchCount} IP(s) match expectation<br>${results.length - matchCount} IP(s) mismatch</p>`;
+                                        } else {
+                                        summaryHTML += `<p class="result-detail">No IPs match expected hash</p>`;
+                                        }
+                                }
+                            }
+                        } else {
+                            if (hashValidation.all_match) {
+                                summaryHTML += '<p class="result-status success">✓ All hashes match</p>';
+                            } else {
+                                summaryHTML += '<p class="result-status error">✗ Hash mismatch detected</p>';
+                                summaryHTML += `<p class="result-detail">${hashValidation.unique_hashes} unique hash${hashValidation.unique_hashes !== 1 ? 'es' : ''} found</p>`;
+                            }
+                        }
+                    } else {
+                        const successCount = results.filter(r => r.status_code == 200 || r.status_code == 301 || r.status_code == 302).length;
+                        const errorCount = results.filter(r => r.error).length;
+                        if (errorCount === 0 && successCount > 0) {
+                            summaryHTML += '<p class="result-status success">✓ All requests successful</p>';
+                        } else if (errorCount > 0) {
+                            summaryHTML += `<p class="result-status error">✗ ${errorCount} error${errorCount !== 1 ? 's' : ''}</p>`;
+                        } else {
+                            summaryHTML += '<p class="result-detail">No content hashes found</p>';
+                        }
+                    }
+                } else {
+                    summaryHTML += '<p class="result-status success">✓ Request successful</p>';
+                    summaryHTML += '<p class="result-detail">(Content analysis available via JSON/YAML parsing)</p>';
+                }
+                
+                summaryHTML += '</div>';
+                return summaryHTML;
+            }
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const targetUrl = urlInput.value.trim();
+                if (!targetUrl) {
+                    summary.innerHTML = '<p style="text-align: center; color: var(--accent);">Please provide a URL.</p>';
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<span class="spinner"></span>Running...';
+                summary.innerHTML = '<p style="text-align: center; color: var(--muted);">Resolving IPs and fetching content...</p>';
+                fullResultsDrawer.style.display = 'none';
+                curlCommandDrawer.style.display = 'none';
+
                 try {
-                    const params = new URLSearchParams({
-                        url: urlInput.value.trim(),
+                    const paramsObj = {
+                        url: targetUrl,
                         format: formatSelect.value,
                         timeout: timeoutInput.value,
                         hash_alg: hashAlgSelect.value
-                    });
-                    if (hashInput.value.trim()) params.append('hash', hashInput.value.trim());
-                    if (eovEndpointsInput.value.trim()) params.append('eov_endpoints', eovEndpointsInput.value.trim());
+                    };
+                    
+                    const endpoints = eovEndpointsInput.value.trim();
+                    if (endpoints) paramsObj.eov_endpoints = endpoints;
+
+                    const params = new URLSearchParams(paramsObj);
+                    const hashValue = hashInput.value.trim();
+                    if (hashValue) params.append('hash', hashValue);
 
                     const apiUrl = window.location.origin + '/v1/eov?' + params.toString();
                     curlCommand.value = `curl '${apiUrl}'`;
                     curlCommandDrawer.style.display = 'block';
-
-                    const res = await fetch('/v1/eov?' + params.toString());
-                    const text = await res.text();
+                    
+                    const resp = await fetch('/v1/eov?' + params.toString());
+                    const text = await resp.text();
+                    
+                    fullResultsSummary.textContent = `Full Results (${formatSelect.value.toUpperCase()})`;
                     output.value = text;
                     fullResultsDrawer.style.display = 'block';
-                    
-                    if (!res.ok) throw new Error(res.status);
-                    
-                    // Simple summary update
-                    summary.innerHTML = '<div class="result-summary"><p class="result-status success">Done</p><p class="result-detail">See Full Results below</p></div>';
+
+                    if (!resp.ok) {
+                            summary.innerHTML = `<p class="result-status error">Request failed (${resp.status})</p>`;
+                            return;
+                    }
+
+                    let results = [];
+                    let hostname = new URL(targetUrl).hostname;
+                    let totalTime = null;
+
+                    try {
+                        if (formatSelect.value === 'json') {
+                            const data = JSON.parse(text);
+                            results = data.results || [];
+                            hostname = data.hostname;
+                            totalTime = data.total_time_seconds;
+                            output.value = JSON.stringify(data, null, 2);
+                        } else if (formatSelect.value === 'csv') {
+                            results = parseCSV(text);
+                        } else if (formatSelect.value === 'yaml') {
+                            results = parseYAML(text);
+                        }
+                        
+                        summary.innerHTML = performAnalysis(results, hostname, totalTime, hashValue);
+
+                    } catch (parseErr) {
+                        console.error(parseErr);
+                        summary.innerHTML = `
+                            <div class="result-summary">
+                                <h3>${hostname}</h3>
+                                <p class="result-status success">✓ Request successful</p>
+                                <p class="result-detail" style="font-size: 0.8em">Analysis failed (Parse Error)</p>
+                            </div>`;
+                    }
+
                 } catch (err) {
-                    summary.innerHTML = `<p class="result-status error">Error: ${err}</p>`;
+                    summary.innerHTML = `<p class="result-status error">Request failed: ${err}</p>`;
                 } finally {
                     submitBtn.disabled = false;
-                    submitBtn.innerHTML = 'Run /v1/eov';
+                    submitBtn.innerHTML = originalBtnText;
                 }
+            });
+
+            const piLink = document.getElementById('pi-link');
+            piLink.addEventListener('click', (e) => {
+                if (!(e.ctrlKey && e.shiftKey)) e.preventDefault();
             });
         </script>
     """
