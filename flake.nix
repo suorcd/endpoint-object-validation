@@ -57,6 +57,8 @@
             requests
             urllib3
             pyyaml
+            pytest
+            pytest-mock
           ]);
         in
         {
@@ -82,6 +84,9 @@
               echo "  cd flask"
               echo "  flask --app app run --host=0.0.0.0 --port=5000"
               echo "  flask --app app run --host=0.0.0.0 --port=5000 --debug  # with hot reload"
+              echo ""
+              echo "Running Tests:"
+              echo "  cd flask && pytest"
               echo ""
               echo "Bash script:"
               echo "  ./eov.sh <URL> [--hash HASH] [--file FILE] [--hash-alg HASH_ALG]"
@@ -122,6 +127,9 @@
               echo ""
               echo "With hot reload:"
               echo "  flask --app app run --host=0.0.0.0 --port=5000 --debug"
+              echo ""
+              echo "Running Tests:"
+              echo "  cd flask && pytest"
               echo ""
               echo "Local container testing:"
               echo "  cd flask"
