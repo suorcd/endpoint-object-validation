@@ -401,3 +401,283 @@ def test_home_page_contains_form_fields(client):
     assert b'id="timeout"' in rv.data
     assert b'id="format"' in rv.data
     assert b'id="eov-endpoints"' in rv.data
+
+
+# --- Additional edge case and unit tests ---
+
+def test_v1_eov_aws_metadata_ip_forbidden(client):
+    """Test that AWS metadata IP (169.254.169.254) is forbidden."""
+    rv = client.get('/v1/eov?url=http://169.254.169.254/latest/meta-data/')
+    assert rv.status_code == 400
+    json_data = rv.get_json()
+    assert json_data['error'] == 'Invalid hostname'
+
+def test_v1_eov_url_without_hostname(client):
+    """Test error handling for malformed URL without hostname."""
+    rv = client.get('/v1/eov?url=not-a-valid-url')
+    assert rv.status_code == 400
+    json_data = rv.get_json()
+    assert json_data['error'] == 'Invalid hostname'
+
+def test_v1_eov_empty_url(client):
+    """Test error handling for empty URL parameter."""
+    rv = client.get('/v1/eov?url=')
+    assert rv.status_code == 400
+    json_data = rv.get_json()
+    assert 'error' in json_data
+
+def test_v1_eov_scheme_passed_correctly_http(client):
+    """Test that HTTP scheme is correctly identified."""
+    with patch('app.socket.gethostbyname_ex') as mock_socket:
+        with patch('app.check_single_ip') as mock_check:
+            mock_socket.return_value = ('example.com', [], ['1.1.1.1'])
+            mock_check.return_value = {
+                'ip': '1.1.1.1', 'status_code': 200, 'hash': 'xyz', 
+                'hash_alg': 'md5', 'file_size_bytes': 50
+            }
+            
+            rv = client.get('/v1/eov?url=http://example.com/file')
+            
+            assert rv.status_code == 200
+            # check_single_ip(ip, url, hostname, scheme, timeout, hash_alg, expected_hash)
+            call_args = mock_check.call_args
+            assert call_args[0][3] == 'http'  # scheme is 4th positional argument
+
+def test_v1_eov_scheme_passed_correctly_https(client):
+    """Test that HTTPS scheme is correctly identified."""
+    with patch('app.socket.gethostbyname_ex') as mock_socket:
+        with patch('app.check_single_ip') as mock_check:
+            mock_socket.return_value = ('example.com', [], ['1.1.1.1'])
+            mock_check.return_value = {
+                'ip': '1.1.1.1', 'status_code': 200, 'hash': 'xyz', 
+                'hash_alg': 'md5', 'file_size_bytes': 50
+            }
+            
+            rv = client.get('/v1/eov?url=https://example.com/file')
+            
+            assert rv.status_code == 200
+            call_args = mock_check.call_args
+            assert call_args[0][3] == 'https'  # scheme is 4th positional argument
+
+def test_check_single_ip_http_success():
+    """Test check_single_ip function with HTTP request."""
+    from app import check_single_ip
+    
+    with patch('app.requests.Session') as mock_session_class:
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        mock_response = MagicMock()
+        mock_response.content = b'test content'
+        mock_response.status_code = 200
+        mock_session.get.return_value = mock_response
+        
+        result = check_single_ip(
+            ip='1.1.1.1',
+            url='http://example.com/file.txt',
+            hostname='example.com',
+            scheme='http',
+            timeout=30,
+            hash_alg='md5',
+            expected_hash=None
+        )
+        
+        assert result['ip'] == '1.1.1.1'
+        assert result['status_code'] == 200
+        assert result['hash'] is not None
+        assert result['file_size_bytes'] == 12  # len(b'test content')
+
+def test_check_single_ip_with_expected_hash():
+    """Test check_single_ip function with expected hash validation."""
+    from app import check_single_ip
+    import hashlib
+    
+    test_content = b'test content'
+    expected = hashlib.md5(test_content).hexdigest()
+    
+    with patch('app.requests.Session') as mock_session_class:
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        mock_response = MagicMock()
+        mock_response.content = test_content
+        mock_response.status_code = 200
+        mock_session.get.return_value = mock_response
+        
+        result = check_single_ip(
+            ip='1.1.1.1',
+            url='http://example.com/file.txt',
+            hostname='example.com',
+            scheme='http',
+            timeout=30,
+            hash_alg='md5',
+            expected_hash=expected
+        )
+        
+        assert result['hash_matches'] == True
+
+def test_check_single_ip_request_exception():
+    """Test check_single_ip error handling when request fails."""
+    from app import check_single_ip
+    
+    with patch('app.requests.Session') as mock_session_class:
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        mock_session.get.side_effect = Exception('Connection refused')
+        
+        result = check_single_ip(
+            ip='1.1.1.1',
+            url='http://example.com/file.txt',
+            hostname='example.com',
+            scheme='http',
+            timeout=30,
+            hash_alg='md5',
+            expected_hash=None
+        )
+        
+        assert result['ip'] == '1.1.1.1'
+        assert result['status_code'] is None
+        assert result['error'] == 'Connection refused'
+
+def test_query_external_eov_success():
+    """Test query_external_eov function with successful response."""
+    from app import query_external_eov
+    
+    with patch('app.requests.get') as mock_get:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'results': [
+                {'ip': '10.0.0.1', 'hash': 'abc123', 'status_code': 200}
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+        
+        results = query_external_eov(
+            node_url='https://node1.example.com',
+            target_url='http://target.com/file.txt',
+            params={'hash_alg': 'md5', 'timeout': 30}
+        )
+        
+        assert len(results) == 1
+        assert results[0]['ip'] == '10.0.0.1'
+        assert results[0]['eov_server'] == 'https://node1.example.com'
+
+def test_query_external_eov_adds_https_prefix():
+    """Test that query_external_eov adds https:// prefix if missing."""
+    from app import query_external_eov
+    
+    with patch('app.requests.get') as mock_get:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {'results': [{'ip': '1.1.1.1'}]}
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+        
+        results = query_external_eov(
+            node_url='node1.example.com',  # No scheme
+            target_url='http://target.com/file.txt',
+            params={'hash_alg': 'md5', 'timeout': 30}
+        )
+        
+        # Verify the URL was prefixed with https://
+        assert results[0]['eov_server'] == 'https://node1.example.com'
+
+def test_query_external_eov_connection_error():
+    """Test query_external_eov error handling when connection fails."""
+    from app import query_external_eov
+    
+    with patch('app.requests.get') as mock_get:
+        mock_get.side_effect = Exception('Connection timeout')
+        
+        results = query_external_eov(
+            node_url='https://node1.example.com',
+            target_url='http://target.com/file.txt',
+            params={'hash_alg': 'md5', 'timeout': 30}
+        )
+        
+        assert len(results) == 1
+        assert 'error' in results[0]
+        assert 'Connection timeout' in results[0]['error']
+        assert results[0]['ip'] == '0.0.0.0'
+
+def test_sni_adapter_initialization():
+    """Test SniAdapter class initialization."""
+    from app import SniAdapter
+    
+    adapter = SniAdapter(sni_hostname='example.com')
+    assert adapter.sni_hostname == 'example.com'
+
+def test_render_page_output():
+    """Test render_page helper function output."""
+    from app import render_page
+    
+    # We need to be in a request context for url_for to work
+    with app.test_request_context('/'):
+        html = render_page('Test Title', '<p>Test Content</p>')
+        
+        assert '<title>Test Title</title>' in html
+        assert '<p>Test Content</p>' in html
+        assert 'style.css' in html
+        assert '<!DOCTYPE html>' in html
+
+def test_v1_eov_default_hash_algorithm(client):
+    """Test that MD5 is the default hash algorithm."""
+    with patch('app.socket.gethostbyname_ex') as mock_socket:
+        with patch('app.check_single_ip') as mock_check:
+            mock_socket.return_value = ('example.com', [], ['1.1.1.1'])
+            mock_check.return_value = {
+                'ip': '1.1.1.1', 'status_code': 200, 'hash': 'xyz', 
+                'hash_alg': 'md5', 'file_size_bytes': 50
+            }
+            
+            rv = client.get('/v1/eov?url=http://example.com/file')
+            
+            assert rv.status_code == 200
+            data = rv.get_json()
+            assert data['hash_alg'] == 'md5'
+
+def test_v1_eov_default_timeout(client):
+    """Test that 33 seconds is the default timeout."""
+    with patch('app.socket.gethostbyname_ex') as mock_socket:
+        with patch('app.check_single_ip') as mock_check:
+            mock_socket.return_value = ('example.com', [], ['1.1.1.1'])
+            mock_check.return_value = {
+                'ip': '1.1.1.1', 'status_code': 200, 'hash': 'xyz', 
+                'hash_alg': 'md5', 'file_size_bytes': 50
+            }
+            
+            rv = client.get('/v1/eov?url=http://example.com/file')
+            
+            assert rv.status_code == 200
+            # check_single_ip(ip, url, hostname, scheme, timeout, hash_alg, expected_hash)
+            call_args = mock_check.call_args
+            assert call_args[0][4] == 33  # default timeout
+
+def test_v1_eov_case_insensitive_hash_algorithm(client):
+    """Test that hash algorithm is case-insensitive."""
+    with patch('app.socket.gethostbyname_ex') as mock_socket:
+        with patch('app.check_single_ip') as mock_check:
+            mock_socket.return_value = ('example.com', [], ['1.1.1.1'])
+            mock_check.return_value = {
+                'ip': '1.1.1.1', 'status_code': 200, 'hash': 'xyz', 
+                'hash_alg': 'sha256', 'file_size_bytes': 50
+            }
+            
+            rv = client.get('/v1/eov?url=http://example.com/file&hash_alg=SHA256')
+            
+            assert rv.status_code == 200
+            data = rv.get_json()
+            assert data['hash_alg'] == 'sha256'
+
+def test_v1_eov_case_insensitive_format(client):
+    """Test that format parameter is case-insensitive."""
+    with patch('app.socket.gethostbyname_ex') as mock_socket:
+        with patch('app.check_single_ip') as mock_check:
+            mock_socket.return_value = ('example.com', [], ['1.1.1.1'])
+            mock_check.return_value = {
+                'ip': '1.1.1.1', 'status_code': 200, 'hash': 'xyz', 
+                'hash_alg': 'md5', 'file_size_bytes': 50
+            }
+            
+            rv = client.get('/v1/eov?url=http://example.com/file&format=YAML')
+            
+            assert rv.status_code == 200
+            assert rv.mimetype == 'text/yaml'
