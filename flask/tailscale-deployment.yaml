@@ -77,7 +77,7 @@ spec:
               name: tailscale-auth
               key: auth-key
         - name: TS_HOSTNAME
-          value: "eov-flask"
+          value: "eov"
         - name: TS_ACCEPT_DNS
           value: "true"
         - name: TS_ROUTES
