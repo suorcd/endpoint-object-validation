@@ -46,6 +46,56 @@ subjects:
 # Do not define it here to avoid overwriting the auth key
 
 ---
+# EOV Flask Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eov-flask
+  labels:
+    app: eov-flask
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eov-flask
+  template:
+    metadata:
+      labels:
+        app: eov-flask
+    spec:
+      containers:
+      - name: eov-flask
+        image: ${IMAGE_NAME}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+---
+# Service for EOV Flask
+apiVersion: v1
+kind: Service
+metadata:
+  name: eov-flask-service
+  namespace: default
+spec:
+  selector:
+    app: eov-flask
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
 # Tailscale Proxy Deployment
 apiVersion: apps/v1
 kind: Deployment

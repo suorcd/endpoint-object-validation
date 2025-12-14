@@ -23,6 +23,17 @@ cd flask
 flask --app app run --host=0.0.0.0 --port=5000 --debug
 ```
 
+## Running Tests
+Validation tests are included in `tests/` and mock network calls and DNS resolution, so they are safe to run anywhere.
+```bash
+# enter the dev shell (if not already in it)
+nix develop
+
+# run tests
+cd flask
+pytest
+```
+
 ## Files Included
 - `eov-flask-deployment.yaml` — Flask app deployment and ConfigMap
 - `eov-flask-ingress.yaml` — ingress routing to the Flask service
