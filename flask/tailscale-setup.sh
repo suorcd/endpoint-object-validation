@@ -17,6 +17,9 @@ fi
 
 echo "✓ Cluster is reachable"
 
+# Create namespace if it doesn't exist
+kubectl create namespace eov --dry-run=client -o yaml | kubectl apply -f -
+
 # Step 1: Get Tailscale auth key
 echo ""
 echo "Step 1: Tailscale Authentication"
