@@ -67,7 +67,11 @@ if [[ $APPLY_STATUS -ne 0 ]]; then
 fi
 set -e
 
-kubectl apply -f "$SCRIPT_DIR/eov-flask-ingress.yaml"
+if [[ -n "$HOST" ]]; then
+    sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/eov-flask-ingress.yaml" | kubectl apply -f -
+else
+    kubectl apply -f "$SCRIPT_DIR/eov-flask-ingress.yaml"
+fi
 
 if $TAILSCALE; then
     kubectl apply -f "$SCRIPT_DIR/tailscale-deployment.yaml"
