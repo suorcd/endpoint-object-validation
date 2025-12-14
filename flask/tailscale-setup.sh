@@ -72,13 +72,30 @@ sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/tailscale-deployme
 
 echo "✓ Tailscale configuration applied with host: eov.$TAILNET_NAME"
 
-# Step 5: Wait for Tailscale pod to be ready
+# Step 5: Force rollout restart to pick up new config
 echo ""
-echo "Step 5: Waiting for Tailscale pod to be ready..."
+echo "Step 5: Restarting Tailscale pod to apply new config..."
+kubectl rollout restart deployment/eov-flask-tailscale -n eov
 
-kubectl rollout status deployment/eov-flask-tailscale -n eov --timeout=2m
+# Step 6: Wait for Tailscale pod to be ready
+echo ""
+echo "Step 6: Waiting for Tailscale pod to be ready..."
 
-echo "✓ Tailscale is ready"
+if kubectl rollout status deployment/eov-flask-tailscale -n eov --timeout=30s; then
+    echo "✓ Tailscale is ready"
+else
+    echo "Rollout failed, checking for auth key issues..."
+    # Check logs for invalid key error
+    if kubectl logs -l app=eov-flask-tailscale -n eov --tail=20 2>/dev/null | grep -q "invalid key"; then
+        echo "ERROR: The provided Tailscale auth key is invalid or expired."
+        echo "Please generate a new auth key from https://login.tailscale.com/admin/settings/keys"
+        exit 1
+    else
+        echo "ERROR: Tailscale pod failed to start for an unknown reason."
+        echo "Check pod logs with: kubectl logs -l app=eov-flask-tailscale -n eov"
+        exit 1
+    fi
+fi
 
 # Step 7: Get device info
 echo ""
