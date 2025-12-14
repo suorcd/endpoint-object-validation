@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: tailscale-operator
-  namespace: default
+  namespace: eov
 
 ---
 # Tailscale Operator ClusterRole
@@ -39,7 +39,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: tailscale-operator
-  namespace: default
+  namespace: eov
 
 ---
 # NOTE: Tailscale Auth Secret is created by tailscale-setup.sh
@@ -51,6 +51,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: eov-flask
+  namespace: eov
   labels:
     app: eov-flask
 spec:
@@ -84,7 +85,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: eov-flask-service
-  namespace: default
+  namespace: eov
 spec:
   selector:
     app: eov-flask
@@ -181,7 +182,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: tailscale-serve-config
-  namespace: default
+  namespace: eov
 data:
   # The PLACEHOLDER string below will be replaced by tailscale-setup.sh
   serve.json: |
@@ -198,14 +199,14 @@ data:
         "eov-flask.PLACEHOLDER_TAILNET_NAME:80": {
           "Handlers": {
             "/": {
-              "Proxy": "http://eov-flask-service.default.svc.cluster.local:80"
+              "Proxy": "http://eov-flask-service.eov.svc.cluster.local:80"
             }
           }
         },
         "eov-flask.PLACEHOLDER_TAILNET_NAME:443": {
           "Handlers": {
             "/": {
-              "Proxy": "http://eov-flask-service.default.svc.cluster.local:80"
+              "Proxy": "http://eov-flask-service.eov.svc.cluster.local:80"
             }
           }
         }
@@ -218,7 +219,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: eov-flask-tailscale-service
-  namespace: default
+  namespace: eov
 spec:
   selector:
     app: eov-flask-tailscale

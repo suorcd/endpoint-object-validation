@@ -17,6 +17,9 @@ fi
 
 echo "✓ Cluster is reachable"
 
+# Create namespace if it doesn't exist
+kubectl create namespace eov --dry-run=client -o yaml | kubectl apply -f -
+
 # Step 1: Get Tailscale auth key
 echo ""
 echo "Step 1: Tailscale Authentication"
@@ -51,7 +54,7 @@ echo "Step 3: Creating Tailscale authentication secret..."
 
 kubectl create secret generic tailscale-auth \
   --from-literal=auth-key="$AUTH_KEY" \
-  -n default \
+  -n eov \
   --dry-run=client \
   -o yaml | kubectl apply -f -
 
@@ -67,20 +70,32 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # We use | as delimiter for sed to avoid issues with dots in domain names
 sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/tailscale-deployment.yaml" | kubectl apply -f -
 
-echo "✓ Tailscale configuration applied with host: eov-flask.$TAILNET_NAME"
+echo "✓ Tailscale configuration applied with host: eov.$TAILNET_NAME"
 
-# Step 5: Force Restart to pick up ConfigMap changes
+# Step 5: Force rollout restart to pick up new config
 echo ""
 echo "Step 5: Restarting Tailscale pod to apply new config..."
-kubectl rollout restart deployment/eov-flask-tailscale -n default
+kubectl rollout restart deployment/eov-flask-tailscale -n eov
 
 # Step 6: Wait for Tailscale pod to be ready
 echo ""
 echo "Step 6: Waiting for Tailscale pod to be ready..."
 
-kubectl rollout status deployment/eov-flask-tailscale -n default --timeout=2m
-
-echo "✓ Tailscale is ready"
+if kubectl rollout status deployment/eov-flask-tailscale -n eov --timeout=30s; then
+    echo "✓ Tailscale is ready"
+else
+    echo "Rollout failed, checking for auth key issues..."
+    # Check logs for invalid key error
+    if kubectl logs -l app=eov-flask-tailscale -n eov --tail=20 2>/dev/null | grep -q "invalid key"; then
+        echo "ERROR: The provided Tailscale auth key is invalid or expired."
+        echo "Please generate a new auth key from https://login.tailscale.com/admin/settings/keys"
+        exit 1
+    else
+        echo "ERROR: Tailscale pod failed to start for an unknown reason."
+        echo "Check pod logs with: kubectl logs -l app=eov-flask-tailscale -n eov"
+        exit 1
+    fi
+fi
 
 # Step 7: Get device info
 echo ""
@@ -88,10 +103,10 @@ echo "=========================================="
 echo "Tailscale Setup Complete!"
 echo "=========================================="
 echo ""
-echo "Device registered on your tailnet as: eov-flask"
+echo "Device registered on your tailnet as: eov"
 echo ""
 echo "Your service should now be accessible via:"
-echo "  https://eov-flask.$TAILNET_NAME"
+echo "  https://eov.$TAILNET_NAME"
 echo ""
 echo "To verify:"
-echo "  kubectl logs -l app=eov-flask-tailscale -n default | grep -i 'serve'"
+echo "  kubectl logs -l app=eov-flask-tailscale -n eov | grep -i 'serve'"

@@ -41,6 +41,9 @@ fi
 
 echo "✓ Cluster is reachable"
 
+# Create namespace if it doesn't exist
+kubectl create namespace eov --dry-run=client -o yaml | kubectl apply -f -
+
 # Step 0: Rebuild and push the Docker image
 echo ""
 echo "Step 0: Building and pushing Docker image..."
@@ -67,7 +70,11 @@ if [[ $APPLY_STATUS -ne 0 ]]; then
 fi
 set -e
 
-kubectl apply -f "$SCRIPT_DIR/eov-flask-ingress.yaml"
+if [[ -n "$HOST" ]]; then
+    sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/eov-flask-ingress.yaml" | kubectl apply -f -
+else
+    kubectl apply -f "$SCRIPT_DIR/eov-flask-ingress.yaml"
+fi
 
 if $TAILSCALE; then
     kubectl apply -f "$SCRIPT_DIR/tailscale-deployment.yaml"
@@ -79,9 +86,9 @@ echo "✓ Configuration applied"
 echo ""
 echo "Step 2: Forcing deployment rollout with new image..."
 
-kubectl rollout restart deployment/eov-flask -n default
+kubectl rollout restart deployment/eov-flask -n eov
 if $TAILSCALE; then
-    kubectl rollout restart deployment/eov-flask-tailscale -n default
+    kubectl rollout restart deployment/eov-flask-tailscale -n eov
 fi
 
 echo "✓ Rollout restarted"
@@ -90,9 +97,9 @@ echo "✓ Rollout restarted"
 echo ""
 echo "Step 3: Waiting for deployment rollout..."
 
-kubectl rollout status deployment/eov-flask -n default --timeout=5m
+kubectl rollout status deployment/eov-flask -n eov --timeout=5m
 if $TAILSCALE; then
-    kubectl rollout status deployment/eov-flask-tailscale -n default --timeout=5m
+    kubectl rollout status deployment/eov-flask-tailscale -n eov --timeout=5m
 fi
 
 echo "✓ Deployments are ready"
@@ -102,6 +109,6 @@ echo ""
 echo "=========================================="
 echo "Deployment Complete!"
 echo "=========================================="
-kubectl get services -n default
+kubectl get services -n eov
 echo ""
-kubectl get ingress -n default
+kubectl get ingress -n eov
