@@ -73,3 +73,14 @@ For an HTTP API version of EOV, see `flask/README.md`. The Flask app exposes `/v
 
 ![Flask UI Demo](flask/static/demo00.png)
 
+### Running Tests
+
+To run the tests for the Flask application:
+
+```bash
+cd flask
+pytest -v
+```
+
+This requires `pytest` to be installed. Use `nix develop` to enter a development shell with all dependencies, including `pytest`.
+
