@@ -51,6 +51,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: eov-flask-tailscale
+  namespace: eov
   labels:
     app: eov-flask-tailscale
 spec:

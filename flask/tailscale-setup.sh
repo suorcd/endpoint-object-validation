@@ -70,7 +70,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # We use | as delimiter for sed to avoid issues with dots in domain names
 sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/tailscale-deployment.yaml" | kubectl apply -f -
 
-echo "✓ Tailscale configuration applied with host: eov-flask.$TAILNET_NAME"
+echo "✓ Tailscale configuration applied with host: eov.$TAILNET_NAME"
 
 # Step 5: Wait for Tailscale pod to be ready
 echo ""
