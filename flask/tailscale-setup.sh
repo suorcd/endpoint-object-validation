@@ -72,14 +72,9 @@ sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/tailscale-deployme
 
 echo "✓ Tailscale configuration applied with host: eov-flask.$TAILNET_NAME"
 
-# Step 5: Force Restart to pick up ConfigMap changes
+# Step 5: Wait for Tailscale pod to be ready
 echo ""
-echo "Step 5: Restarting Tailscale pod to apply new config..."
-kubectl rollout restart deployment/eov-flask-tailscale -n eov
-
-# Step 6: Wait for Tailscale pod to be ready
-echo ""
-echo "Step 6: Waiting for Tailscale pod to be ready..."
+echo "Step 5: Waiting for Tailscale pod to be ready..."
 
 kubectl rollout status deployment/eov-flask-tailscale -n eov --timeout=2m
 
