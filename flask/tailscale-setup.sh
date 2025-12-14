@@ -51,7 +51,7 @@ echo "Step 3: Creating Tailscale authentication secret..."
 
 kubectl create secret generic tailscale-auth \
   --from-literal=auth-key="$AUTH_KEY" \
-  -n default \
+  -n eov \
   --dry-run=client \
   -o yaml | kubectl apply -f -
 
@@ -72,13 +72,13 @@ echo "✓ Tailscale configuration applied with host: eov-flask.$TAILNET_NAME"
 # Step 5: Force Restart to pick up ConfigMap changes
 echo ""
 echo "Step 5: Restarting Tailscale pod to apply new config..."
-kubectl rollout restart deployment/eov-flask-tailscale -n default
+kubectl rollout restart deployment/eov-flask-tailscale -n eov
 
 # Step 6: Wait for Tailscale pod to be ready
 echo ""
 echo "Step 6: Waiting for Tailscale pod to be ready..."
 
-kubectl rollout status deployment/eov-flask-tailscale -n default --timeout=2m
+kubectl rollout status deployment/eov-flask-tailscale -n eov --timeout=2m
 
 echo "✓ Tailscale is ready"
 
@@ -94,4 +94,4 @@ echo "Your service should now be accessible via:"
 echo "  https://eov.$TAILNET_NAME"
 echo ""
 echo "To verify:"
-echo "  kubectl logs -l app=eov-flask-tailscale -n default | grep -i 'serve'"
+echo "  kubectl logs -l app=eov-flask-tailscale -n eov | grep -i 'serve'"
