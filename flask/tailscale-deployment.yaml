@@ -7,11 +7,12 @@ metadata:
   namespace: eov
 
 ---
-# Tailscale Operator ClusterRole
+# Tailscale Operator Role
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   name: tailscale-operator
+  namespace: eov
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
@@ -27,14 +28,15 @@ rules:
   verbs: ["get", "create", "patch"]
 
 ---
-# Tailscale Operator ClusterRoleBinding
+# Tailscale Operator RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: tailscale-operator
+  namespace: eov
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: tailscale-operator
 subjects:
 - kind: ServiceAccount
