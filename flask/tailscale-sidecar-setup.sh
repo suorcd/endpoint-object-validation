@@ -82,7 +82,8 @@ echo "To get your auth key:"
 echo "  1. Go to https://login.tailscale.com/admin/settings/keys"
 echo "  2. Generate a new Auth key (reusable recommended)"
 echo ""
-read -p "Enter your Tailscale Auth Key: " AUTH_KEY
+read -s -p "Enter your Tailscale Auth Key: " AUTH_KEY
+echo ""
 
 if [ -z "$AUTH_KEY" ]; then
     echo "ERROR: Auth key cannot be empty"
