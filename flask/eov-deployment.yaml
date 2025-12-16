@@ -46,26 +46,26 @@ subjects:
 # Do not define it here to avoid overwriting the auth key
 
 ---
-# EOV Flask Deployment
+# EOV Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: eov-flask
+  name: eov
   namespace: eov
   labels:
-    app: eov-flask
+    app: eov
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: eov-flask
+      app: eov
   template:
     metadata:
       labels:
-        app: eov-flask
+        app: eov
     spec:
       containers:
-      - name: eov-flask
+      - name: eov
         image: ${IMAGE_NAME}
         imagePullPolicy: Always
         ports:
@@ -80,15 +80,15 @@ spec:
             cpu: "500m"
 
 ---
-# Service for EOV Flask
+# Service for EOV Deployment
 apiVersion: v1
 kind: Service
 metadata:
-  name: eov-flask-service
+  name: eov-service
   namespace: eov
 spec:
   selector:
-    app: eov-flask
+    app: eov
   ports:
   - port: 80
     targetPort: 5000
@@ -101,19 +101,19 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: eov-flask-tailscale
+  name: eov-tailscale
   namespace: eov
   labels:
-    app: eov-flask-tailscale
+    app: eov-tailscale
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: eov-flask-tailscale
+      app: eov-tailscale
   template:
     metadata:
       labels:
-        app: eov-flask-tailscale
+        app: eov-tailscale
     spec:
       serviceAccountName: tailscale-operator
       containers:
@@ -129,7 +129,7 @@ spec:
               name: tailscale-auth
               key: auth-key
         - name: TS_HOSTNAME
-          value: "eov-flask"
+          value: "eov"
         - name: TS_ACCEPT_DNS
           value: "true"
         - name: TS_ROUTES
@@ -197,17 +197,17 @@ data:
         }
       },
       "Web": {
-        "eov-flask.PLACEHOLDER_TAILNET_NAME:80": {
+        "eov.PLACEHOLDER_TAILNET_NAME:80": {
           "Handlers": {
             "/": {
-              "Proxy": "http://eov-flask-service.eov.svc.cluster.local:80"
+              "Proxy": "http://eov-service.eov.svc.cluster.local:80"
             }
           }
         },
-        "eov-flask.PLACEHOLDER_TAILNET_NAME:443": {
+        "eov.PLACEHOLDER_TAILNET_NAME:443": {
           "Handlers": {
             "/": {
-              "Proxy": "http://eov-flask-service.eov.svc.cluster.local:80"
+              "Proxy": "http://eov-service.eov.svc.cluster.local:80"
             }
           }
         }
@@ -219,11 +219,11 @@ data:
 apiVersion: v1
 kind: Service
 metadata:
-  name: eov-flask-tailscale-service
+  name: eov-tailscale-service
   namespace: eov
 spec:
   selector:
-    app: eov-flask-tailscale
+    app: eov-tailscale
   ports:
   - port: 80
     targetPort: 80
