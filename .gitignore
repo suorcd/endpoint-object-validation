@@ -23,4 +23,7 @@ dist/
 *gz
 *.zip
 *.zst
-.env
+# Direnv/dirvenv
+.direnv/
+.dirvenv/
+.envrc
