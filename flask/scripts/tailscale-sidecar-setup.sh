@@ -82,7 +82,8 @@ echo "To get your auth key:"
 echo "  1. Go to https://login.tailscale.com/admin/settings/keys"
 echo "  2. Generate a new Auth key (reusable recommended)"
 echo ""
-read -s -p "Enter your Tailscale Auth Key: " AUTH_KEY
+#read -s -p "Enter your Tailscale Auth Key: " AUTH_KEY
+read -p "Enter your Tailscale Auth Key: " AUTH_KEY
 echo ""
 
 if [ -z "$AUTH_KEY" ]; then
@@ -124,7 +125,14 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Read the template and replace the placeholder with the actual tailnet name
 # We use | as delimiter for sed to avoid issues with dots in domain names
-sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/manifests/tailscale-deployment.yaml" | kubectl apply -f -
+MANIFEST_PATH="$SCRIPT_DIR/../manifests/tailscale-deployment.yaml"
+if [ ! -f "$MANIFEST_PATH" ]; then
+    echo "ERROR: Manifest not found at $MANIFEST_PATH"
+    echo "Make sure the file exists relative to this script."
+    exit 1
+fi
+
+sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$MANIFEST_PATH" | kubectl apply -f -
 
 echo "✓ Tailscale configuration applied with host: eov.$TAILNET_NAME"
 
