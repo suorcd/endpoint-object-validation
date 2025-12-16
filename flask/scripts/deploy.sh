@@ -87,10 +87,13 @@ kubectl create namespace eov --dry-run=client -o yaml | kubectl apply -f -
 # Step 0: Rebuild and push the Docker image
 echo ""
 echo "Step 0: Building and pushing Docker image..."
+DOCKER_CONTEXT="$SCRIPT_DIR/.."
+if [[ ! -f "$DOCKER_CONTEXT/Dockerfile" ]]; then
+    echo "ERROR: Dockerfile not found at $DOCKER_CONTEXT/Dockerfile"
+    exit 1
+fi
 
-cd "$SCRIPT_DIR"
-
-docker build -t "$IMAGE_NAME" .
+docker build -t "$IMAGE_NAME" "$DOCKER_CONTEXT"
 docker push "$IMAGE_NAME"
 echo "✓ Docker image built and pushed"
 
@@ -105,12 +108,12 @@ set +e
 
 if $TS_OPERATOR; then
     # Use ts-operator manifest (includes deployment + service with Tailscale annotations)
-    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/manifests/eov-ts-operator.yaml" | kubectl apply -f -
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/../manifests/eov-ts-operator.yaml" | kubectl apply -f -
     APPLY_STATUS=$?
     if [[ $APPLY_STATUS -ne 0 ]]; then
         echo "Apply failed (likely immutable selector). Deleting deployment/eov and retrying..."
         kubectl delete deployment/eov --ignore-not-found
-        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/manifests/eov-ts-operator.yaml" | kubectl apply -f - || exit 1
+        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/../manifests/eov-ts-operator.yaml" | kubectl apply -f - || exit 1
     fi
 else
     # Use standard deployment manifest
@@ -124,14 +127,14 @@ else
     
     # Apply ingress for non-ts-operator deployments
     if [[ -n "$HOST" ]]; then
-        sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/manifests/eov-ingress.yaml" | kubectl apply -f -
+        sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/../manifests/eov-ingress.yaml" | kubectl apply -f -
     else
-        kubectl apply -f "$SCRIPT_DIR/manifests/eov-ingress.yaml"
+        kubectl apply -f "$SCRIPT_DIR/../manifests/eov-ingress.yaml"
     fi
     
     # Apply separate tailscale proxy if --tailscale flag is used
     if $TAILSCALE; then
-        kubectl apply -f "$SCRIPT_DIR/manifests/tailscale-deployment.yaml"
+        kubectl apply -f "$SCRIPT_DIR/../manifests/tailscale-deployment.yaml"
     fi
 fi
 
@@ -143,7 +146,7 @@ echo "Step 2: Forcing deployment rollout with new image..."
 
 kubectl rollout restart deployment/eov -n eov
 if $TAILSCALE; then
-    kubectl rollout restart deployment/eov-tailscale -n eov
+    kubectl rollout restart deployment/eov-flask-tailscale -n eov
 fi
 # Note: ts-operator doesn't need separate tailscale deployment restart
 
