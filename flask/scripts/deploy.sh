@@ -58,8 +58,12 @@ if [ "$DELETE_MODE" = true ]; then
     echo "Cleaning up eov resources"
     echo "========================================="
     echo "Removing deployments, services, ingress, and namespace..."
-    kubectl delete namespace eov --ignore-not-found
-    echo "✓ eov namespace and all resources removed"
+    # Delete namespace without waiting to avoid hangs on finalizers
+    kubectl delete namespace eov --ignore-not-found --wait=false
+    # Clean up cluster-scoped RBAC that may have been applied by manifests
+    kubectl delete clusterrole tailscale-operator --ignore-not-found
+    kubectl delete clusterrolebinding tailscale-operator --ignore-not-found
+    echo "✓ Delete requests sent; namespace removal continues in background"
     exit 0
 fi
 
