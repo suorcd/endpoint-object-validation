@@ -98,12 +98,6 @@ echo "✓ Docker image built and pushed"
 echo ""
 echo "Step 1: Applying configuration..."
 
-# Move manifests to the manifests directory
-mv eov-deployment.yaml manifests/
-mv eov-ingress.yaml manifests/
-mv eov-ts-operator.yaml manifests/
-mv tailscale-deployment.yaml manifests/
-mv tailscale-setup.sh manifests/
 
 # Apply YAML files with a fallback for immutable selector errors
 # (deployment selectors are immutable; if they changed, delete/recreate the deployment)
