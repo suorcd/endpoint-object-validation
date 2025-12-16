@@ -8,6 +8,7 @@ set -e
 # Parse arguments
 TAILSCALE=false
 TS_OPERATOR=false
+DELETE_MODE=false
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --tailscale)
@@ -18,10 +19,15 @@ while [[ "$#" -gt 0 ]]; do
             TS_OPERATOR=true
             shift
             ;;
+        --delete)
+            DELETE_MODE=true
+            shift
+            ;;
         --help|-h)
-            echo "Usage: $0 [--tailscale|--ts-operator]"
+            echo "Usage: $0 [--tailscale|--ts-operator] [--delete]"
             echo "  --tailscale    Deploy with separate Tailscale proxy container"
             echo "  --ts-operator  Deploy with Tailscale operator (requires operator installed)"
+            echo "  --delete       Remove all eov resources and namespace"
             exit 0
             ;;
         *)
@@ -40,6 +46,25 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
     source "$SCRIPT_DIR/.env"
 fi
 
+# Check if kubectl is configured
+if ! kubectl cluster-info &> /dev/null; then
+    echo "ERROR: kubectl not configured or cluster unreachable"
+    exit 1
+fi
+
+# Handle delete mode
+if [ "$DELETE_MODE" = true ]; then
+    echo "========================================="
+    echo "Cleaning up eov resources"
+    echo "========================================="
+    echo "Removing deployments, services, ingress, and namespace..."
+    kubectl delete namespace eov --ignore-not-found
+    echo "✓ eov namespace and all resources removed"
+    exit 0
+fi
+
+echo "✓ Cluster is reachable"
+
 # Set default image name if not provided in .env
 IMAGE_NAME="${IMAGE_NAME:-ghcr.io/suorcd/eov-flask:latest}"
 
@@ -55,14 +80,6 @@ elif $TAILSCALE; then
 else
     echo "Tailscale disabled (use --tailscale or --ts-operator to enable)"
 fi
-
-# Check if kubectl is configured
-if ! kubectl cluster-info &> /dev/null; then
-    echo "ERROR: kubectl not configured or cluster unreachable"
-    exit 1
-fi
-
-echo "✓ Cluster is reachable"
 
 # Create namespace if it doesn't exist
 kubectl create namespace eov --dry-run=client -o yaml | kubectl apply -f -
