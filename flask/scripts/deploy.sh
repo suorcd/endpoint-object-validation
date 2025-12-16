@@ -164,7 +164,12 @@ kubectl get services -n eov
 echo ""
 kubectl get ingress -n eov
 echo ""
+echo "Access via:"
+if [ -n "${HOST:-}" ]; then
+    echo "  LAN:       http://${HOST}"
+elif [ -n "${INGRESS_HOST:-}" ]; then
+    echo "  LAN:       http://${INGRESS_HOST}/  (Ingress IP)"
+fi
 if $TS_OPERATOR; then
-    echo "Tailscale access (HTTPS only):"
-    echo "  https://eov.koi-mohs.ts.net"
+    echo "  Tailscale: https://eov.... (HTTPS only)"
 fi
