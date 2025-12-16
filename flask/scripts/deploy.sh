@@ -141,7 +141,6 @@ kubectl rollout restart deployment/eov -n eov
 if $TAILSCALE; then
     kubectl rollout restart deployment/eov-flask-tailscale -n eov
 fi
-# Note: ts-operator doesn't need separate tailscale deployment restart
 
 echo "✓ Rollout restarted"
 
@@ -153,7 +152,6 @@ kubectl rollout status deployment/eov -n eov --timeout=5m
 if $TAILSCALE; then
     kubectl rollout status deployment/eov-tailscale -n eov --timeout=5m
 fi
-# Note: ts-operator doesn't need separate tailscale deployment status check
 
 echo "✓ Deployments are ready"
 
@@ -165,3 +163,8 @@ echo "=========================================="
 kubectl get services -n eov
 echo ""
 kubectl get ingress -n eov
+echo ""
+if $TS_OPERATOR; then
+    echo "Tailscale access (HTTPS only):"
+    echo "  https://eov.koi-mohs.ts.net"
+fi
