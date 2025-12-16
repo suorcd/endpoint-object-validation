@@ -104,28 +104,28 @@ set +e
 
 if $TS_OPERATOR; then
     # Use ts-operator manifest (includes deployment + service with Tailscale annotations)
-    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-ts-operator.yaml" | kubectl apply -f -
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-ts-operator.yaml" | kubectl apply -f -
     APPLY_STATUS=$?
     if [[ $APPLY_STATUS -ne 0 ]]; then
-        echo "Apply failed (likely immutable selector). Deleting deployment/eov-flask and retrying..."
-        kubectl delete deployment/eov-flask --ignore-not-found
-        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-ts-operator.yaml" | kubectl apply -f - || exit 1
+        echo "Apply failed (likely immutable selector). Deleting deployment/eov and retrying..."
+        kubectl delete deployment/eov --ignore-not-found
+        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-ts-operator.yaml" | kubectl apply -f - || exit 1
     fi
 else
     # Use standard deployment manifest
-    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-deployment.yaml" | kubectl apply -f -
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-deployment.yaml" | kubectl apply -f -
     APPLY_STATUS=$?
     if [[ $APPLY_STATUS -ne 0 ]]; then
-        echo "Apply failed (likely immutable selector). Deleting deployment/eov-flask and retrying..."
-        kubectl delete deployment/eov-flask --ignore-not-found
-        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-deployment.yaml" | kubectl apply -f - || exit 1
+        echo "Apply failed (likely immutable selector). Deleting deployment/eov and retrying..."
+        kubectl delete deployment/eov --ignore-not-found
+        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-deployment.yaml" | kubectl apply -f - || exit 1
     fi
     
     # Apply ingress for non-ts-operator deployments
     if [[ -n "$HOST" ]]; then
-        sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/eov-flask-ingress.yaml" | kubectl apply -f -
+        sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/eov-ingress.yaml" | kubectl apply -f -
     else
-        kubectl apply -f "$SCRIPT_DIR/eov-flask-ingress.yaml"
+        kubectl apply -f "$SCRIPT_DIR/eov-ingress.yaml"
     fi
     
     # Apply separate tailscale proxy if --tailscale flag is used
@@ -140,9 +140,9 @@ echo "✓ Configuration applied"
 echo ""
 echo "Step 2: Forcing deployment rollout with new image..."
 
-kubectl rollout restart deployment/eov-flask -n eov
+kubectl rollout restart deployment/eov -n eov
 if $TAILSCALE; then
-    kubectl rollout restart deployment/eov-flask-tailscale -n eov
+    kubectl rollout restart deployment/eov-tailscale -n eov
 fi
 # Note: ts-operator doesn't need separate tailscale deployment restart
 
@@ -152,9 +152,9 @@ echo "✓ Rollout restarted"
 echo ""
 echo "Step 3: Waiting for deployment rollout..."
 
-kubectl rollout status deployment/eov-flask -n eov --timeout=5m
+kubectl rollout status deployment/eov -n eov --timeout=5m
 if $TAILSCALE; then
-    kubectl rollout status deployment/eov-flask-tailscale -n eov --timeout=5m
+    kubectl rollout status deployment/eov-tailscale -n eov --timeout=5m
 fi
 # Note: ts-operator doesn't need separate tailscale deployment status check
 
