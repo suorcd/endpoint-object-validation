@@ -98,39 +98,46 @@ echo "✓ Docker image built and pushed"
 echo ""
 echo "Step 1: Applying configuration..."
 
+# Move manifests to the manifests directory
+mv eov-deployment.yaml manifests/
+mv eov-ingress.yaml manifests/
+mv eov-ts-operator.yaml manifests/
+mv tailscale-deployment.yaml manifests/
+mv tailscale-setup.sh manifests/
+
 # Apply YAML files with a fallback for immutable selector errors
 # (deployment selectors are immutable; if they changed, delete/recreate the deployment)
 set +e
 
 if $TS_OPERATOR; then
     # Use ts-operator manifest (includes deployment + service with Tailscale annotations)
-    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-ts-operator.yaml" | kubectl apply -f -
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/manifests/eov-ts-operator.yaml" | kubectl apply -f -
     APPLY_STATUS=$?
     if [[ $APPLY_STATUS -ne 0 ]]; then
         echo "Apply failed (likely immutable selector). Deleting deployment/eov and retrying..."
         kubectl delete deployment/eov --ignore-not-found
-        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-ts-operator.yaml" | kubectl apply -f - || exit 1
+        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/manifests/eov-ts-operator.yaml" | kubectl apply -f - || exit 1
     fi
 else
     # Use standard deployment manifest
-    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-deployment.yaml" | kubectl apply -f -
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/manifests/eov-deployment.yaml" | kubectl apply -f -
     APPLY_STATUS=$?
     if [[ $APPLY_STATUS -ne 0 ]]; then
         echo "Apply failed (likely immutable selector). Deleting deployment/eov and retrying..."
         kubectl delete deployment/eov --ignore-not-found
-        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-deployment.yaml" | kubectl apply -f - || exit 1
+        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/manifests/eov-deployment.yaml" | kubectl apply -f - || exit 1
     fi
     
     # Apply ingress for non-ts-operator deployments
     if [[ -n "$HOST" ]]; then
-        sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/eov-ingress.yaml" | kubectl apply -f -
+        sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/manifests/eov-ingress.yaml" | kubectl apply -f -
     else
-        kubectl apply -f "$SCRIPT_DIR/eov-ingress.yaml"
+        kubectl apply -f "$SCRIPT_DIR/manifests/eov-ingress.yaml"
     fi
     
     # Apply separate tailscale proxy if --tailscale flag is used
     if $TAILSCALE; then
-        kubectl apply -f "$SCRIPT_DIR/tailscale-deployment.yaml"
+        kubectl apply -f "$SCRIPT_DIR/manifests/tailscale-deployment.yaml"
     fi
 fi
 
