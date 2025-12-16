@@ -117,7 +117,7 @@ if $TS_OPERATOR; then
     fi
 else
     # Use standard deployment manifest (includes ingress)
-    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/../manifests/eov.yaml" | kubectl apply -f -
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g; s|\${HOST}|${HOST}|g" "$SCRIPT_DIR/../manifests/eov.yaml" | kubectl apply -f -
     APPLY_STATUS=$?
     if [[ $APPLY_STATUS -ne 0 ]]; then
         echo "Apply failed (likely immutable selector). Deleting deployment/eov and retrying..."
