@@ -124,7 +124,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Read the template and replace the placeholder with the actual tailnet name
 # We use | as delimiter for sed to avoid issues with dots in domain names
-sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/manifest/tailscale-deployment.yaml" | kubectl apply -f -
+sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/manifests/tailscale-deployment.yaml" | kubectl apply -f -
 
 echo "✓ Tailscale configuration applied with host: eov.$TAILNET_NAME"
 
