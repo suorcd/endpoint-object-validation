@@ -3,22 +3,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: eov-flask
+  name: eov
   namespace: eov
   labels:
-    app: eov-flask
+    app: eov
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: eov-flask
+      app: eov
   template:
     metadata:
       labels:
-        app: eov-flask
+        app: eov
     spec:
       containers:
-      - name: eov-flask
+      - name: eov
         image: ${IMAGE_NAME}
         imagePullPolicy: Always
         ports:
@@ -37,14 +37,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: eov-flask-service
+  name: eov-service
   namespace: eov
   annotations:
     tailscale.com/expose: "true"
     tailscale.com/hostname: "eov"
 spec:
   selector:
-    app: eov-flask
+    app: eov
   ports:
   - name: http
     port: 80
