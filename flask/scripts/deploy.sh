@@ -116,20 +116,13 @@ if $TS_OPERATOR; then
         sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/../manifests/eov-ts-operator.yaml" | kubectl apply -f - || exit 1
     fi
 else
-    # Use standard deployment manifest
+    # Use standard deployment manifest (includes ingress)
     sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/../manifests/eov.yaml" | kubectl apply -f -
     APPLY_STATUS=$?
     if [[ $APPLY_STATUS -ne 0 ]]; then
         echo "Apply failed (likely immutable selector). Deleting deployment/eov and retrying..."
         kubectl delete deployment/eov --ignore-not-found
         sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/../manifests/eov.yaml" | kubectl apply -f - || exit 1
-    fi
-    
-    # Apply ingress for non-ts-operator deployments
-    if [[ -n "$HOST" ]]; then
-        sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/../manifests/eov-ingress.yaml" | kubectl apply -f -
-    else
-        kubectl apply -f "$SCRIPT_DIR/../manifests/eov-ingress.yaml"
     fi
     
     # Apply separate tailscale proxy if --tailscale flag is used
