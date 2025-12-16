@@ -5,6 +5,61 @@
 
 set -e
 
+# Parse command line arguments
+DELETE_MODE=false
+if [ "$1" = "--delete" ]; then
+    DELETE_MODE=true
+fi
+
+# Delete mode - cleanup everything
+if [ "$DELETE_MODE" = true ]; then
+    echo "=========================================="
+    echo "Tailscale Kubernetes Cleanup"
+    echo "=========================================="
+    
+    # Check if kubectl is configured
+    if ! kubectl cluster-info &> /dev/null; then
+        echo "ERROR: kubectl not configured or cluster unreachable"
+        exit 1
+    fi
+    
+    echo "✓ Cluster is reachable"
+    echo ""
+    echo "This will delete:"
+    echo "  - Tailscale deployment (eov-flask-tailscale)"
+    echo "  - Tailscale authentication secret (tailscale-auth)"
+    echo "  - Service account and related resources"
+    echo ""
+    read -p "Are you sure you want to proceed? (yes/no): " CONFIRM
+    
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "Cleanup cancelled"
+        exit 0
+    fi
+    
+    echo ""
+    echo "Deleting Tailscale deployment..."
+    kubectl delete deployment eov-flask-tailscale -n eov 2>/dev/null || echo "  (deployment not found)"
+    
+    echo "Deleting Tailscale secret..."
+    kubectl delete secret tailscale-auth -n eov 2>/dev/null || echo "  (secret not found)"
+    
+    echo "Deleting service account..."
+    kubectl delete serviceaccount tailscale -n eov 2>/dev/null || echo "  (service account not found)"
+    
+    echo "Deleting role..."
+    kubectl delete role tailscale -n eov 2>/dev/null || echo "  (role not found)"
+    
+    echo "Deleting role binding..."
+    kubectl delete rolebinding tailscale -n eov 2>/dev/null || echo "  (role binding not found)"
+    
+    echo ""
+    echo "=========================================="
+    echo "Tailscale Cleanup Complete!"
+    echo "=========================================="
+    exit 0
+fi
+
 echo "=========================================="
 echo "Tailscale Kubernetes Setup"
 echo "=========================================="
