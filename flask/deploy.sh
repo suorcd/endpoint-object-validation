@@ -7,9 +7,30 @@ set -e
 
 # Parse arguments
 TAILSCALE=false
-if [[ "$1" == "--tailscale" ]]; then
-    TAILSCALE=true
-fi
+TS_OPERATOR=false
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --tailscale)
+            TAILSCALE=true
+            shift
+            ;;
+        --ts-operator)
+            TS_OPERATOR=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--tailscale|--ts-operator]"
+            echo "  --tailscale    Deploy with separate Tailscale proxy container"
+            echo "  --ts-operator  Deploy with Tailscale operator (requires operator installed)"
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
 
 # Configuration
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -27,10 +48,12 @@ echo "Kubernetes Cluster Setup"
 echo "=========================================="
 echo "Target Image: $IMAGE_NAME"
 
-if $TAILSCALE; then
-    echo "Tailscale deployment enabled"
+if $TS_OPERATOR; then
+    echo "Tailscale Operator deployment enabled"
+elif $TAILSCALE; then
+    echo "Tailscale proxy deployment enabled"
 else
-    echo "Tailscale deployment disabled (use --tailscale to enable)"
+    echo "Tailscale disabled (use --tailscale or --ts-operator to enable)"
 fi
 
 # Check if kubectl is configured
@@ -61,23 +84,37 @@ echo "Step 1: Applying configuration..."
 # Apply YAML files with a fallback for immutable selector errors
 # (deployment selectors are immutable; if they changed, delete/recreate the deployment)
 set +e
-sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-deployment.yaml" | kubectl apply -f -
-APPLY_STATUS=$?
-if [[ $APPLY_STATUS -ne 0 ]]; then
-    echo "Apply failed (likely immutable selector). Deleting deployment/eov-flask and retrying..."
-    kubectl delete deployment/eov-flask --ignore-not-found
-    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-deployment.yaml" | kubectl apply -f - || exit 1
-fi
-set -e
 
-if [[ -n "$HOST" ]]; then
-    sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/eov-flask-ingress.yaml" | kubectl apply -f -
+if $TS_OPERATOR; then
+    # Use ts-operator manifest (includes deployment + service with Tailscale annotations)
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-ts-operator.yaml" | kubectl apply -f -
+    APPLY_STATUS=$?
+    if [[ $APPLY_STATUS -ne 0 ]]; then
+        echo "Apply failed (likely immutable selector). Deleting deployment/eov-flask and retrying..."
+        kubectl delete deployment/eov-flask --ignore-not-found
+        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-ts-operator.yaml" | kubectl apply -f - || exit 1
+    fi
 else
-    kubectl apply -f "$SCRIPT_DIR/eov-flask-ingress.yaml"
-fi
-
-if $TAILSCALE; then
-    kubectl apply -f "$SCRIPT_DIR/tailscale-deployment.yaml"
+    # Use standard deployment manifest
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-deployment.yaml" | kubectl apply -f -
+    APPLY_STATUS=$?
+    if [[ $APPLY_STATUS -ne 0 ]]; then
+        echo "Apply failed (likely immutable selector). Deleting deployment/eov-flask and retrying..."
+        kubectl delete deployment/eov-flask --ignore-not-found
+        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/eov-flask-deployment.yaml" | kubectl apply -f - || exit 1
+    fi
+    
+    # Apply ingress for non-ts-operator deployments
+    if [[ -n "$HOST" ]]; then
+        sed "s|  - http:|  - host: $HOST\n    http:|" "$SCRIPT_DIR/eov-flask-ingress.yaml" | kubectl apply -f -
+    else
+        kubectl apply -f "$SCRIPT_DIR/eov-flask-ingress.yaml"
+    fi
+    
+    # Apply separate tailscale proxy if --tailscale flag is used
+    if $TAILSCALE; then
+        kubectl apply -f "$SCRIPT_DIR/tailscale-deployment.yaml"
+    fi
 fi
 
 echo "✓ Configuration applied"
@@ -90,6 +127,7 @@ kubectl rollout restart deployment/eov-flask -n eov
 if $TAILSCALE; then
     kubectl rollout restart deployment/eov-flask-tailscale -n eov
 fi
+# Note: ts-operator doesn't need separate tailscale deployment restart
 
 echo "✓ Rollout restarted"
 
@@ -101,6 +139,7 @@ kubectl rollout status deployment/eov-flask -n eov --timeout=5m
 if $TAILSCALE; then
     kubectl rollout status deployment/eov-flask-tailscale -n eov --timeout=5m
 fi
+# Note: ts-operator doesn't need separate tailscale deployment status check
 
 echo "✓ Deployments are ready"
 

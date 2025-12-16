@@ -1,0 +1,55 @@
+---
+# EOV Flask Deployment (for Tailscale Operator)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eov-flask
+  namespace: eov
+  labels:
+    app: eov-flask
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eov-flask
+  template:
+    metadata:
+      labels:
+        app: eov-flask
+    spec:
+      containers:
+      - name: eov-flask
+        image: ${IMAGE_NAME}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+---
+# Service for EOV Flask (with Tailscale Operator annotations)
+apiVersion: v1
+kind: Service
+metadata:
+  name: eov-flask-service
+  namespace: eov
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: "eov"
+spec:
+  selector:
+    app: eov-flask
+  ports:
+  - name: http
+    port: 80
+    targetPort: 5000
+  - name: https
+    port: 443
+    targetPort: 5000
+  type: ClusterIP
