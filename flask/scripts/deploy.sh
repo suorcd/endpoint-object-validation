@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Version: 2
+echo "=========================================="
+echo "Running deploy.sh (Version: 2)"
+echo "=========================================="
 
 # Kubernetes Cluster Deployment Script
 # k3s server and agents (set your hosts via .env or environment variables)
@@ -111,13 +115,13 @@ echo "Step 1: Applying configuration..."
 set +e
 
 if $TS_OPERATOR; then
-    # Use ts-operator manifest (includes deployment + service with Tailscale annotations)
-    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/../manifests/eov-ts-operator.yaml" | kubectl apply -f -
+    # Use ts-operator manifest. We now inject HOST as well for the LAN ingress.
+    sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g; s|\${HOST}|${HOST}|g" "$SCRIPT_DIR/../manifests/eov-ts-operator.yaml" | kubectl apply -f -
     APPLY_STATUS=$?
     if [[ $APPLY_STATUS -ne 0 ]]; then
         echo "Apply failed (likely immutable selector). Deleting deployment/eov and retrying..."
         kubectl delete deployment/eov --ignore-not-found
-        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g" "$SCRIPT_DIR/../manifests/eov-ts-operator.yaml" | kubectl apply -f - || exit 1
+        sed "s|\${IMAGE_NAME}|$IMAGE_NAME|g; s|\${HOST}|${HOST}|g" "$SCRIPT_DIR/../manifests/eov-ts-operator.yaml" | kubectl apply -f - || exit 1
     fi
 else
     # Use standard deployment manifest (includes ingress)

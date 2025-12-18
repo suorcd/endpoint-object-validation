@@ -1,4 +1,5 @@
 ---
+# Version: 2
 # EOV Flask Deployment (for Tailscale Operator)
 apiVersion: apps/v1
 kind: Deployment
@@ -49,7 +50,7 @@ spec:
   type: ClusterIP
 
 ---
-# Tailscale Ingress for EOV
+# Tailscale Ingress for EOV (VPN Access)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -65,3 +66,24 @@ spec:
   tls:
     - hosts:
         - eov
+
+---
+# Standard Ingress for EOV (LAN Access)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eov-ingress
+  namespace: eov
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: ${HOST}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: eov-service
+            port:
+              number: 80
