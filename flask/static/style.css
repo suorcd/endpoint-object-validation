@@ -248,3 +248,52 @@ a#pi-link {
     padding: 10px;
     resize: vertical;
 }
+
+/* --- Responsive Design Additions --- */
+
+/* Tablet and smaller (max-width: 768px) */
+@media (max-width: 768px) {
+    body {
+        padding: 16px;
+        /* Align to top to prevent cutting off content when scrolling on small screens */
+        align-items: flex-start;
+        height: auto;
+    }
+
+    .panel {
+        padding: 20px 16px;
+        margin: 20px 0;
+    }
+
+    textarea {
+        height: 400px; /* Reduce height of big text areas on tablets */
+    }
+}
+
+/* Mobile phones (max-width: 480px) */
+@media (max-width: 480px) {
+    h2 {
+        font-size: 1.4em;
+    }
+
+    /* Stack the input and button vertically */
+    .url-input-group {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    button {
+        width: 100%;
+        padding: 14px; /* Larger touch target */
+    }
+
+    /* Adjust advanced options for narrow width */
+    .options-content {
+        padding: 12px;
+    }
+
+    #full-results-drawer textarea {
+        height: 300px; /* Even smaller for mobile */
+    }
+}
