@@ -53,6 +53,7 @@ def render_page(title, content, extra_head=""):
     return f"""<!DOCTYPE html>
     <html>
         <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>{title}</title>
             <link rel="shortcut icon" href="{favicon}">
             <link rel="stylesheet" href="{style}">
