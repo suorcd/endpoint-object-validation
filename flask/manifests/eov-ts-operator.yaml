@@ -1,0 +1,89 @@
+---
+# Version: 2
+# EOV Flask Deployment (for Tailscale Operator)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eov
+  namespace: eov
+  labels:
+    app: eov
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eov
+  template:
+    metadata:
+      labels:
+        app: eov
+    spec:
+      containers:
+      - name: eov
+        image: ${IMAGE_NAME}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+---
+# Service for EOV Flask
+apiVersion: v1
+kind: Service
+metadata:
+  name: eov-service
+  namespace: eov
+spec:
+  selector:
+    app: eov
+  ports:
+  - name: http
+    port: 80
+    targetPort: 5000
+  type: ClusterIP
+
+---
+# Tailscale Ingress for EOV (VPN Access)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eov-tailscale
+  namespace: eov
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: eov-service
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - eov
+
+---
+# Standard Ingress for EOV (LAN Access)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eov-ingress
+  namespace: eov
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: ${HOST}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: eov-service
+            port:
+              number: 80

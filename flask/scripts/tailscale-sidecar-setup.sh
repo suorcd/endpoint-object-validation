@@ -5,6 +5,61 @@
 
 set -e
 
+# Parse command line arguments
+DELETE_MODE=false
+if [ "$1" = "--delete" ]; then
+    DELETE_MODE=true
+fi
+
+# Delete mode - cleanup everything
+if [ "$DELETE_MODE" = true ]; then
+    echo "=========================================="
+    echo "Tailscale Kubernetes Cleanup"
+    echo "=========================================="
+    
+    # Check if kubectl is configured
+    if ! kubectl cluster-info &> /dev/null; then
+        echo "ERROR: kubectl not configured or cluster unreachable"
+        exit 1
+    fi
+    
+    echo "✓ Cluster is reachable"
+    echo ""
+    echo "This will delete:"
+    echo "  - Tailscale deployment (eov-flask-tailscale)"
+    echo "  - Tailscale authentication secret (tailscale-auth)"
+    echo "  - Service account and related resources"
+    echo ""
+    read -p "Are you sure you want to proceed? (yes/no): " CONFIRM
+    
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "Cleanup cancelled"
+        exit 0
+    fi
+    
+    echo ""
+    echo "Deleting Tailscale deployment..."
+    kubectl delete deployment eov-flask-tailscale -n eov 2>/dev/null || echo "  (deployment not found)"
+    
+    echo "Deleting Tailscale secret..."
+    kubectl delete secret tailscale-auth -n eov 2>/dev/null || echo "  (secret not found)"
+    
+    echo "Deleting service account..."
+    kubectl delete serviceaccount tailscale -n eov 2>/dev/null || echo "  (service account not found)"
+    
+    echo "Deleting role..."
+    kubectl delete role tailscale -n eov 2>/dev/null || echo "  (role not found)"
+    
+    echo "Deleting role binding..."
+    kubectl delete rolebinding tailscale -n eov 2>/dev/null || echo "  (role binding not found)"
+    
+    echo ""
+    echo "=========================================="
+    echo "Tailscale Cleanup Complete!"
+    echo "=========================================="
+    exit 0
+fi
+
 echo "=========================================="
 echo "Tailscale Kubernetes Setup"
 echo "=========================================="
@@ -27,7 +82,9 @@ echo "To get your auth key:"
 echo "  1. Go to https://login.tailscale.com/admin/settings/keys"
 echo "  2. Generate a new Auth key (reusable recommended)"
 echo ""
+#read -s -p "Enter your Tailscale Auth Key: " AUTH_KEY
 read -p "Enter your Tailscale Auth Key: " AUTH_KEY
+echo ""
 
 if [ -z "$AUTH_KEY" ]; then
     echo "ERROR: Auth key cannot be empty"
@@ -68,7 +125,14 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Read the template and replace the placeholder with the actual tailnet name
 # We use | as delimiter for sed to avoid issues with dots in domain names
-sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$SCRIPT_DIR/tailscale-deployment.yaml" | kubectl apply -f -
+MANIFEST_PATH="$SCRIPT_DIR/../manifests/tailscale-deployment.yaml"
+if [ ! -f "$MANIFEST_PATH" ]; then
+    echo "ERROR: Manifest not found at $MANIFEST_PATH"
+    echo "Make sure the file exists relative to this script."
+    exit 1
+fi
+
+sed "s|PLACEHOLDER_TAILNET_NAME|$TAILNET_NAME|g" "$MANIFEST_PATH" | kubectl apply -f -
 
 echo "✓ Tailscale configuration applied with host: eov.$TAILNET_NAME"
 

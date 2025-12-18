@@ -30,6 +30,7 @@
               pkgs.curl
               pkgs.drill
               pkgs.coreutils
+              pkgs.moreutils
             ];
 
             installPhase = ''

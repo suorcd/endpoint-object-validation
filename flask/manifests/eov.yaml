@@ -1,0 +1,118 @@
+---
+# Tailscale Operator ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tailscale-operator
+  namespace: eov
+
+---
+# Tailscale Operator ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tailscale-operator
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["get", "create", "patch"]
+
+---
+# Tailscale Operator ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tailscale-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tailscale-operator
+subjects:
+- kind: ServiceAccount
+  name: tailscale-operator
+  namespace: eov
+
+---
+# NOTE: Tailscale Auth Secret is created by tailscale-setup.sh
+# Do not define it here to avoid overwriting the auth key
+
+---
+# EOV Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eov
+  namespace: eov
+  labels:
+    app: eov
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eov
+  template:
+    metadata:
+      labels:
+        app: eov
+    spec:
+      containers:
+      - name: eov
+        image: ${IMAGE_NAME}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+
+---
+# Service for EOV Deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: eov-service
+  namespace: eov
+spec:
+  selector:
+    app: eov
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+# Ingress for EOV Service (LAN access)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eov-ingress
+  namespace: eov
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: ${HOST}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: eov-service
+            port:
+              number: 80
