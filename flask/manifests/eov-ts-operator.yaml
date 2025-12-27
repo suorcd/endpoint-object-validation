@@ -1,6 +1,4 @@
 ---
-# Version: 2
-# EOV Flask Deployment (for Tailscale Operator)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,13 +30,27 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "500m"
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
 
 ---
-# Service for EOV Flask
 apiVersion: v1
 kind: Service
 metadata:
-  name: eov-service
+  name: eov
   namespace: eov
 spec:
   selector:
@@ -50,7 +62,56 @@ spec:
   type: ClusterIP
 
 ---
-# Tailscale Ingress for EOV (VPN Access)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eov-lan-https
+  namespace: eov
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - ${HOST}
+      secretName: eov-lan-tls
+  rules:
+    - host: ${HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: eov
+                port:
+                  number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eov-lan-http
+  namespace: eov
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: ${HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: eov
+                port:
+                  number: 80
+
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -60,30 +121,9 @@ spec:
   ingressClassName: tailscale
   defaultBackend:
     service:
-      name: eov-service
+      name: eov
       port:
         number: 80
   tls:
     - hosts:
         - eov
-
----
-# Standard Ingress for EOV (LAN Access)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: eov-ingress
-  namespace: eov
-spec:
-  ingressClassName: traefik
-  rules:
-  - host: ${HOST}
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: eov-service
-            port:
-              number: 80
