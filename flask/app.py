@@ -142,6 +142,10 @@ def query_external_eov(node_url, target_url, params):
 def favicon():
     return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
+@app.route("/healthz")
+def healthz():
+    return jsonify({'status': 'ok'})
+
 @app.route("/r2.html")
 def r2():
     ascii_art = base64.b64decode(ASCII_ART_B64).decode('utf-8')

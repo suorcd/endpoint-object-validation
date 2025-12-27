@@ -28,6 +28,11 @@ def test_r2_page(client):
     assert rv.status_code == 200
     assert b"Never gonna give you up" in rv.data
 
+def test_healthz(client):
+    rv = client.get('/healthz')
+    assert rv.status_code == 200
+    assert rv.get_json() == {'status': 'ok'}
+
 def test_v1_eov_no_url(client):
     """Test error response when URL is missing."""
     rv = client.get('/v1/eov')
