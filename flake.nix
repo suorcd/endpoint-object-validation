@@ -5,7 +5,8 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
       forAllSystems = nixpkgs.lib.genAttrs [
         "x86_64-linux"
@@ -16,9 +17,18 @@
     in
     {
       # Package the bash script
-      packages = forAllSystems (system:
+      packages = forAllSystems (
+        system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
+          flaskPython = pkgs.python3.withPackages (
+            ps: with ps; [
+              flask
+              requests
+              urllib3
+              pyyaml
+            ]
+          );
         in
         {
           default = pkgs.stdenv.mkDerivation {
@@ -45,22 +55,56 @@
               maintainers = with maintainers; [ suorcd ];
             };
           };
+
+          flask-container =
+            let
+              flaskRoot = pkgs.runCommand "eov-flask-root" { } ''
+                mkdir -p "$out/app"
+                cp ${./flask/app.py} "$out/app/app.py"
+                cp -r ${./flask/static} "$out/app/static"
+              '';
+            in
+            pkgs.dockerTools.buildLayeredImage {
+              name = "eov-flask";
+              tag = "latest";
+              contents = [
+                flaskPython
+                flaskRoot
+                pkgs.cacert
+              ];
+              config = {
+                WorkingDir = "/app";
+                Cmd = [
+                  "python3"
+                  "/app/app.py"
+                ];
+                ExposedPorts = {
+                  "5000/tcp" = { };
+                };
+                Env = [
+                  "PYTHONUNBUFFERED=1"
+                ];
+              };
+            };
         }
       );
 
       # Development shells
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
           python = pkgs.python311;
-          pythonEnv = python.withPackages (ps: with ps; [
-            flask
-            requests
-            urllib3
-            pyyaml
-            pytest
-            pytest-mock
-          ]);
+          pythonEnv = python.withPackages (
+            ps: with ps; [
+              flask
+              requests
+              urllib3
+              pyyaml
+              pytest
+              pytest-mock
+            ]
+          );
         in
         {
           # Default: Flask development environment

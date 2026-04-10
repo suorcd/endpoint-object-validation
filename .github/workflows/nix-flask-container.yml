@@ -1,0 +1,40 @@
+name: Build Nix Flask container
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+jobs:
+  build-flask-container:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build Nix container image
+        run: nix build .#flask-container
+
+      - name: Load image into Docker
+        run: docker load < result
+
+      - name: Run container
+        run: docker run -d --name eov-flask-ci -p 5000:5000 eov-flask:latest
+
+      - name: Verify health endpoint
+        run: |
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:5000/healthz; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Health check failed"
+          docker logs eov-flask-ci
+          exit 1
